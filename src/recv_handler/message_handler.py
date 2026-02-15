@@ -64,22 +64,11 @@ class TelegramUpdateHandler:
             return
 
         message_time = time.time()
-        chat = msg.get("chat") or {}
-        from_user = msg.get("from") or {}
-        chat_type = chat.get("type") or ""
+        chat = msg.get("chat", {})
+        from_user = msg.get("from", {})
+        chat_type = chat.get("type")
         chat_id = chat.get("id")
         user_id = from_user.get("id")
-
-        # Avoid feedback loops if the bot ever receives updates for its own outgoing messages.
-        if self.bot_id is not None and user_id == self.bot_id:
-            logger.debug("忽略 bot 自己发送的消息")
-            return
-
-        if user_id is None or chat_id is None:
-            logger.debug(
-                f"忽略缺少 user_id/chat_id 的消息: user_id={user_id}, chat_id={chat_id}, chat_type={chat_type}"
-            )
-            return
 
         if not await self.check_allow_to_chat(user_id, chat_id, chat_type):
             return
@@ -290,3 +279,5 @@ class TelegramUpdateHandler:
                     logger.debug("@识别: text_mention.user.id 命中 bot_id")
                     return True
         return False
+
+        return segs or None, additional

@@ -43,7 +43,7 @@ class ConfigBase:
             if origin is tuple:
                 if len(value) != len(args):
                     raise TypeError("Tuple length mismatch")
-                return tuple(cls._convert_field(v, t) for v, t in zip(value, args, strict=True))
+                return tuple(cls._convert_field(v, t) for v, t in zip(value, args))
 
         if origin is dict:
             if not isinstance(value, dict):
@@ -70,3 +70,4 @@ class ConfigBase:
         if field_type is Any:
             return value
         return field_type(value)
+

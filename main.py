@@ -1,6 +1,5 @@
 import asyncio
 import signal
-from collections import deque
 from typing import Optional
 
 from src.logger import logger
@@ -18,10 +17,6 @@ async def telegram_poll_loop(handler: TelegramUpdateHandler) -> None:
     offset: Optional[int] = None
     timeout = global_config.telegram_bot.poll_timeout
     allowed = global_config.telegram_bot.allowed_updates
-    # Best-effort de-dup to avoid accidental re-processing (e.g. offset regressions / multi-poller mistakes).
-    seen_update_ids: deque[int] = deque()
-    seen_update_set: set[int] = set()
-    dedup_window = 2048
     logger.info("启动 Telegram 轮询...")
     while True:
         try:
@@ -31,24 +26,7 @@ async def telegram_poll_loop(handler: TelegramUpdateHandler) -> None:
                 await asyncio.sleep(1)
                 continue
             for upd in resp.get("result", []):
-                update_id = upd.get("update_id")
-                if update_id is not None:
-                    try:
-                        uid = int(update_id)
-                        # Keep offset monotonic even if the API ever returns out-of-order updates.
-                        next_offset = uid + 1
-                        offset = next_offset if offset is None else max(offset, next_offset)
-                        if uid in seen_update_set:
-                            logger.debug(f"跳过重复 update_id={uid}")
-                            continue
-                        seen_update_set.add(uid)
-                        seen_update_ids.append(uid)
-                        if len(seen_update_ids) > dedup_window:
-                            old = seen_update_ids.popleft()
-                            seen_update_set.discard(old)
-                    except Exception:
-                        # If update_id is malformed, fall back to raw handling without affecting offset.
-                        pass
+                offset = upd.get("update_id", 0) + 1
                 await handler.handle_update(upd)
         except asyncio.CancelledError:
             raise

@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any, Dict, List, Optional
 
 import aiohttp
@@ -60,12 +61,16 @@ class TelegramClient:
             payload["offset"] = offset
         if allowed_updates is not None:
             payload["allowed_updates"] = allowed_updates
-        async with session.post(self._url("getUpdates"), json=payload, proxy=self._http_proxy()) as resp:
+        async with session.post(
+            self._url("getUpdates"), json=payload, proxy=self._http_proxy()
+        ) as resp:
             return await resp.json()
 
     async def get_file_path(self, file_id: str) -> Optional[str]:
         session = await self.ensure_session()
-        async with session.post(self._url("getFile"), json={"file_id": file_id}, proxy=self._http_proxy()) as resp:
+        async with session.post(
+            self._url("getFile"), json={"file_id": file_id}, proxy=self._http_proxy()
+        ) as resp:
             data = await resp.json()
             if data.get("ok") and data.get("result"):
                 return data["result"].get("file_path")
@@ -84,19 +89,21 @@ class TelegramClient:
         payload: Dict[str, Any] = {"chat_id": chat_id, "text": text}
         if reply_to is not None:
             payload["reply_parameters"] = {"message_id": reply_to}
-        async with session.post(self._url("sendMessage"), json=payload, proxy=self._http_proxy()) as resp:
+        async with session.post(
+            self._url("sendMessage"), json=payload, proxy=self._http_proxy()
+        ) as resp:
             return await resp.json()
 
-    async def send_photo_by_bytes(
-        self, chat_id: int | str, photo_bytes: bytes, caption: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def send_photo_by_bytes(self, chat_id: int | str, photo_bytes: bytes, caption: Optional[str] = None) -> Dict[str, Any]:
         session = await self.ensure_session()
         form = aiohttp.FormData()
         form.add_field("chat_id", str(chat_id))
         if caption:
             form.add_field("caption", caption)
         form.add_field("photo", photo_bytes, filename="image.jpg", content_type="image/jpeg")
-        async with session.post(self._url("sendPhoto"), data=form, proxy=self._http_proxy()) as resp:
+        async with session.post(
+            self._url("sendPhoto"), data=form, proxy=self._http_proxy()
+        ) as resp:
             return await resp.json()
 
     async def send_photo_by_url(self, chat_id: int | str, url: str, caption: Optional[str] = None) -> Dict[str, Any]:
@@ -104,7 +111,9 @@ class TelegramClient:
         payload: Dict[str, Any] = {"chat_id": chat_id, "photo": url}
         if caption:
             payload["caption"] = caption
-        async with session.post(self._url("sendPhoto"), json=payload, proxy=self._http_proxy()) as resp:
+        async with session.post(
+            self._url("sendPhoto"), json=payload, proxy=self._http_proxy()
+        ) as resp:
             return await resp.json()
 
     async def send_voice_by_bytes(
@@ -116,7 +125,9 @@ class TelegramClient:
         if caption:
             form.add_field("caption", caption)
         form.add_field("voice", voice_bytes, filename="voice.ogg", content_type="audio/ogg")
-        async with session.post(self._url("sendVoice"), data=form, proxy=self._http_proxy()) as resp:
+        async with session.post(
+            self._url("sendVoice"), data=form, proxy=self._http_proxy()
+        ) as resp:
             return await resp.json()
 
     async def send_video_by_url(self, chat_id: int | str, url: str, caption: Optional[str] = None) -> Dict[str, Any]:
@@ -124,15 +135,21 @@ class TelegramClient:
         payload: Dict[str, Any] = {"chat_id": chat_id, "video": url}
         if caption:
             payload["caption"] = caption
-        async with session.post(self._url("sendVideo"), json=payload, proxy=self._http_proxy()) as resp:
+        async with session.post(
+            self._url("sendVideo"), json=payload, proxy=self._http_proxy()
+        ) as resp:
             return await resp.json()
 
-    async def send_document_by_url(self, chat_id: int | str, url: str, caption: Optional[str] = None) -> Dict[str, Any]:
+    async def send_document_by_url(
+        self, chat_id: int | str, url: str, caption: Optional[str] = None
+    ) -> Dict[str, Any]:
         session = await self.ensure_session()
         payload: Dict[str, Any] = {"chat_id": chat_id, "document": url}
         if caption:
             payload["caption"] = caption
-        async with session.post(self._url("sendDocument"), json=payload, proxy=self._http_proxy()) as resp:
+        async with session.post(
+            self._url("sendDocument"), json=payload, proxy=self._http_proxy()
+        ) as resp:
             return await resp.json()
 
     async def send_animation_by_bytes(
@@ -144,7 +161,9 @@ class TelegramClient:
         if caption:
             form.add_field("caption", caption)
         form.add_field("animation", anim_bytes, filename="animation.gif", content_type="image/gif")
-        async with session.post(self._url("sendAnimation"), data=form, proxy=self._http_proxy()) as resp:
+        async with session.post(
+            self._url("sendAnimation"), data=form, proxy=self._http_proxy()
+        ) as resp:
             return await resp.json()
 
     def _is_socks(self, proxy_url: Optional[str]) -> bool:
