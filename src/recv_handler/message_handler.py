@@ -47,10 +47,16 @@ class TelegramUpdateHandler:
                 logger.warning("群聊在聊天黑名单中，消息被丢弃")
                 return False
         else:
-            if global_config.chat.private_list_type == "whitelist" and user_id not in global_config.chat.private_list:
+            # Telegram 私聊场景：chat.id 是对端用户 ID；from.id 是实际发送者（可能为 bot 自己）。
+            # 访问控制应基于“对端用户”，因此优先使用 chat_id。
+            peer_user_id = chat_id if chat_id is not None else user_id
+            if (
+                global_config.chat.private_list_type == "whitelist"
+                and peer_user_id not in global_config.chat.private_list
+            ):
                 logger.warning("私聊不在聊天白名单中，消息被丢弃")
                 return False
-            if global_config.chat.private_list_type == "blacklist" and user_id in global_config.chat.private_list:
+            if global_config.chat.private_list_type == "blacklist" and peer_user_id in global_config.chat.private_list:
                 logger.warning("私聊在聊天黑名单中，消息被丢弃")
                 return False
         if user_id in global_config.chat.ban_user_id:
@@ -64,11 +70,19 @@ class TelegramUpdateHandler:
             return
 
         message_time = time.time()
-        chat = msg.get("chat", {})
-        from_user = msg.get("from", {})
-        chat_type = chat.get("type")
+        chat = msg.get("chat") or {}
+        from_user = msg.get("from") or {}
+        chat_type = chat.get("type") or ""
         chat_id = chat.get("id")
         user_id = from_user.get("id")
+
+        if user_id is None or chat_id is None:
+            logger.debug(
+                f"忽略缺少 user_id/chat_id 的消息: user_id={user_id}, chat_id={chat_id}, chat_type={chat_type}"
+            )
+            return
+
+        is_from_bot = self.bot_id is not None and user_id == self.bot_id
 
         if not await self.check_allow_to_chat(user_id, chat_id, chat_type):
             return
@@ -99,6 +113,9 @@ class TelegramUpdateHandler:
         if not seg_list:
             logger.warning("处理后消息内容为空")
             return
+        if is_from_bot:
+            # 不拦截 bot 自发消息；但打标供上游（如需要）区分，避免业务侧误触发循环。
+            additional_config["from_bot"] = True
 
         submit_seg = Seg(type="seglist", data=seg_list)
         message_info = BaseMessageInfo(
@@ -279,5 +296,3 @@ class TelegramUpdateHandler:
                     logger.debug("@识别: text_mention.user.id 命中 bot_id")
                     return True
         return False
-
-        return segs or None, additional

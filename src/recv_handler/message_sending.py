@@ -31,4 +31,3 @@ class MessageSending:
 
 
 message_send_instance = MessageSending()
-

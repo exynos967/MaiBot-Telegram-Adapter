@@ -1,2 +1,3 @@
-from .config import global_config  # re-export for `from src.config import global_config`
+from .config import global_config  # noqa: F401
 
+__all__ = ["global_config"]

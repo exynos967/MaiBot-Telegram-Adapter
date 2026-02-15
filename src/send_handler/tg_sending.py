@@ -52,7 +52,9 @@ class TGMessageSender:
     async def send_document_url(self, chat_id: int | str, url: str, caption: Optional[str] = None) -> Dict[str, Any]:
         return await self.client.send_document_by_url(chat_id, url, caption)
 
-    async def send_animation_base64(self, chat_id: int | str, b64: str, caption: Optional[str] = None) -> Dict[str, Any]:
+    async def send_animation_base64(
+        self, chat_id: int | str, b64: str, caption: Optional[str] = None
+    ) -> Dict[str, Any]:
         import base64
 
         try:

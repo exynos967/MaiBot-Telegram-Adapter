@@ -15,4 +15,3 @@ def pick_username(first_name: Optional[str], last_name: Optional[str], username:
         return username
     name = (first_name or "") + (f" {last_name}" if last_name else "")
     return name.strip() or "TG用户"
-

@@ -11,7 +11,7 @@ class TelegramBotConfig(ConfigBase):
     token: str
     api_base: str = "https://api.telegram.org"
     poll_timeout: int = 20
-    allowed_updates: list[str] = field(default_factory=lambda: ["message", "edited_message"])  # noqa: E731
+    allowed_updates: list[str] = field(default_factory=lambda: ["message"])  # noqa: E731
     proxy_enabled: bool = False
     proxy_url: str = ""
     proxy_from_env: bool = False
