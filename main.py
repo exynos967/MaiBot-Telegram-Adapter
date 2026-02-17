@@ -9,14 +9,18 @@ from src.mmc_com_layer import mmc_start_com, mmc_stop_com, router
 from src.recv_handler.message_sending import message_send_instance
 from src.recv_handler.message_handler import TelegramUpdateHandler
 from src.send_handler.tg_sending import TGMessageSender
+from src.utils import SlidingWindowDeduper
 import src.send_handler.tg_sending as tg_sending
 
 
 async def telegram_poll_loop(handler: TelegramUpdateHandler) -> None:
     tg = handler.tg
     offset: Optional[int] = None
-    timeout = global_config.telegram_bot.poll_timeout
-    allowed = global_config.telegram_bot.allowed_updates
+    tg_cfg = global_config.telegram_bot
+    timeout = tg_cfg.poll_timeout
+    allowed = tg_cfg.allowed_updates
+    dedup_window = tg_cfg.update_dedup_window if tg_cfg.update_dedup_window > 0 else tg_cfg.dedup_window
+    seen_update_deduper = SlidingWindowDeduper[int](dedup_window)
     logger.info("启动 Telegram 轮询...")
     while True:
         try:
@@ -37,6 +41,14 @@ async def telegram_poll_loop(handler: TelegramUpdateHandler) -> None:
                     logger.warning(f"忽略非法 update_id={uid_raw!r} 的 update: {upd}")
                     continue
 
+                # 先推进 offset，确保异常或重复场景不会导致同一 update 被持续回放。
+                next_offset = uid + 1
+                offset = next_offset if offset is None else max(offset, next_offset)
+
+                if seen_update_deduper.seen_or_add(uid):
+                    logger.debug(f"跳过重复 update_id={uid}")
+                    continue
+
                 try:
                     await handler.handle_update(upd)
                 except asyncio.CancelledError:
@@ -44,10 +56,6 @@ async def telegram_poll_loop(handler: TelegramUpdateHandler) -> None:
                 except Exception:
                     # 避免异常导致 offset 不推进而重复拉取同一 update（上游可能因此判定刷屏）
                     logger.exception(f"处理 update_id={uid} 时异常")
-
-                # Telegram 默认按 update_id 递增返回；这里保证 offset 单调推进，避免极端情况下回退导致重复拉取。
-                next_offset = uid + 1
-                offset = next_offset if offset is None else max(offset, next_offset)
         except asyncio.CancelledError:
             raise
         except Exception as e:

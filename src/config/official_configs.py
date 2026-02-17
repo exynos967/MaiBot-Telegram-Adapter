@@ -12,6 +12,9 @@ class TelegramBotConfig(ConfigBase):
     api_base: str = "https://api.telegram.org"
     poll_timeout: int = 20
     allowed_updates: list[str] = field(default_factory=lambda: ["message"])  # noqa: E731
+    dedup_window: int = 4096
+    update_dedup_window: int = 0
+    message_dedup_window: int = 0
     proxy_enabled: bool = False
     proxy_url: str = ""
     proxy_from_env: bool = False

@@ -28,6 +28,8 @@ python MaiBot-Telegram-Adapter/main.py    # Linux/macOS 示例
 
 - `telegram_bot.token`：Telegram Bot Token（向 @BotFather 申请）
 - `telegram_bot.allowed_updates`：默认只接收新消息 `["message"]`；如需接收编辑消息等，可按需加入 `"edited_message"` 等类型
+- `telegram_bot.dedup_window`：通用去重窗口（默认 4096）
+- `telegram_bot.update_dedup_window` / `telegram_bot.message_dedup_window`：分别控制 update 与消息去重窗口；`<=0` 时回退到 `dedup_window`
 - `maibot_server.host/port`：MaiBot Core WebSocket 服务（如 `ws://host:port/ws`）
 - `chat`：黑白名单策略
 - 代理（国内服务器需要配置）：

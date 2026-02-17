@@ -6,6 +6,9 @@ token = ""                                      # Telegram Bot Token（必填）
 api_base = "https://api.telegram.org"           # API 基础地址
 poll_timeout = 20                               # getUpdates 超时（秒）
 allowed_updates = ["message"]                   # 默认仅接收新消息；如需编辑消息可加入 "edited_message" 等
+dedup_window = 4096                             # 通用去重窗口大小（未单独配置时生效）
+update_dedup_window = 0                         # update_id 去重窗口；<=0 时回退到 dedup_window
+message_dedup_window = 0                        # chat_id+message_id 去重窗口；<=0 时回退到 dedup_window
 proxy_enabled = false                           # 是否启用代理
 proxy_url = ""                                  # 代理地址，例如：socks5://127.0.0.1:1080 或 http://127.0.0.1:7890
 proxy_from_env = false                          # 是否从环境变量读取代理（HTTP(S)_PROXY/NO_PROXY）
