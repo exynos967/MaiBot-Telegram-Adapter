@@ -1,7 +1,9 @@
+import json
 from typing import Any, Dict, List, Optional
 
 import aiohttp
 from urllib.parse import urlparse
+from .logger import logger
 
 
 class TelegramClient:
@@ -84,8 +86,81 @@ class TelegramClient:
         payload: Dict[str, Any] = {"chat_id": chat_id, "text": text}
         if reply_to is not None:
             payload["reply_parameters"] = {"message_id": reply_to}
-        async with session.post(self._url("sendMessage"), json=payload, proxy=self._http_proxy()) as resp:
-            return await resp.json()
+        body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        headers = {"Content-Type": "application/json; charset=utf-8"}
+
+        async with session.post(
+            self._url("sendMessage"),
+            data=body,
+            headers=headers,
+            proxy=self._http_proxy(),
+        ) as resp:
+            first_status = resp.status
+            first_server = resp.headers.get("Server")
+            first_content_type = resp.headers.get("Content-Type")
+            first_data = await self._read_json_dict(resp)
+
+        if first_data.get("ok"):
+            return first_data
+
+        if self._is_message_text_empty_error(first_data) and self._has_visible_text(text):
+            logger.warning(
+                "sendMessage(JSON) 被判定为空文本，执行一次表单重试: "
+                f"chat_id={chat_id}, status={first_status}, server={first_server}, "
+                f"resp_content_type={first_content_type}, text_len={len(text)}, text_repr={text[:80]!r}"
+            )
+
+            form_payload: Dict[str, Any] = {"chat_id": str(chat_id), "text": text}
+            if reply_to is not None:
+                form_payload["reply_parameters"] = json.dumps({"message_id": reply_to}, ensure_ascii=False)
+
+            async with session.post(
+                self._url("sendMessage"),
+                data=form_payload,
+                proxy=self._http_proxy(),
+            ) as resp:
+                retry_status = resp.status
+                retry_server = resp.headers.get("Server")
+                retry_content_type = resp.headers.get("Content-Type")
+                retry_data = await self._read_json_dict(resp)
+
+            if retry_data.get("ok"):
+                logger.warning(
+                    "sendMessage(JSON) 失败但表单重试成功: "
+                    f"chat_id={chat_id}, retry_status={retry_status}, retry_server={retry_server}, "
+                    f"retry_content_type={retry_content_type}"
+                )
+            else:
+                logger.error(
+                    "sendMessage(JSON/FORM) 均失败: "
+                    f"chat_id={chat_id}, first={first_data}, retry={retry_data}"
+                )
+            return retry_data
+
+        return first_data
+
+    async def _read_json_dict(self, resp: aiohttp.ClientResponse) -> Dict[str, Any]:
+        try:
+            data = await resp.json(content_type=None)
+        except Exception as e:
+            raw_text = await resp.text()
+            return {
+                "ok": False,
+                "description": "invalid json response",
+                "status_code": resp.status,
+                "raw": raw_text,
+                "error": f"{type(e).__name__}: {e}",
+            }
+        if isinstance(data, dict):
+            return data
+        return {"ok": False, "description": "non-dict json response", "status_code": resp.status, "raw": data}
+
+    def _is_message_text_empty_error(self, data: Dict[str, Any]) -> bool:
+        description = str(data.get("description") or "").lower()
+        return "message text is empty" in description
+
+    def _has_visible_text(self, text: str) -> bool:
+        return isinstance(text, str) and bool(text.strip())
 
     async def send_photo_by_bytes(
         self, chat_id: int | str, photo_bytes: bytes, caption: Optional[str] = None
