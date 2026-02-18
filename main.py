@@ -13,15 +13,36 @@ from src.utils import SlidingWindowDeduper
 import src.send_handler.tg_sending as tg_sending
 
 
+def _positive_int(value: object, default: int) -> int:
+    try:
+        value_int = int(value)
+    except (TypeError, ValueError):
+        return default
+    return value_int if value_int > 0 else default
+
+
+def _normalize_allowed_updates(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return ["message"]
+    ret: list[str] = [str(item) for item in value if isinstance(item, str) and item]
+    return ret or ["message"]
+
+
 async def _bootstrap_poll_offset(
     tg: TelegramClient, allowed_updates: list[str], seen_update_deduper: SlidingWindowDeduper[int]
 ) -> Optional[int]:
     """启动时跳过积压更新，避免历史消息被当作新消息重放。"""
+    max_bootstrap_batches = 20
+    max_consecutive_invalid_batches = 3
     offset: Optional[int] = None
     max_update_id: Optional[int] = None
     skipped = 0
+    batch_count = 0
+    consecutive_invalid_batches = 0
 
-    while True:
+    logger.info("初始化 Telegram 轮询 offset...")
+
+    while batch_count < max_bootstrap_batches:
         try:
             resp = await tg.get_updates(offset=offset, timeout=0, allowed_updates=allowed_updates)
         except asyncio.CancelledError:
@@ -38,18 +59,44 @@ async def _bootstrap_poll_offset(
         if not updates:
             break
 
+        batch_count += 1
+        valid_uid_count = 0
         for upd in updates:
             uid_raw = upd.get("update_id")
             try:
                 uid = int(uid_raw)
             except (TypeError, ValueError):
                 continue
+            valid_uid_count += 1
             skipped += 1
             seen_update_deduper.seen_or_add(uid)
             max_update_id = uid if max_update_id is None else max(max_update_id, uid)
 
+        if valid_uid_count == 0:
+            consecutive_invalid_batches += 1
+            logger.warning(
+                "初始化轮询时收到无有效 update_id 的批次，"
+                f"consecutive_invalid_batches={consecutive_invalid_batches}"
+            )
+            if consecutive_invalid_batches >= max_consecutive_invalid_batches:
+                logger.warning(
+                    "初始化轮询连续收到无有效 update_id 的批次，"
+                    "停止继续清积压并开始正常轮询"
+                )
+                break
+            continue
+        consecutive_invalid_batches = 0
+
         if max_update_id is not None:
             offset = max_update_id + 1
+            if batch_count % 5 == 0:
+                logger.info(f"跳过积压进行中: batches={batch_count}, skipped={skipped}, offset={offset}")
+
+    if batch_count >= max_bootstrap_batches:
+        logger.warning(
+            f"启动积压更新批次数超过上限({max_bootstrap_batches})，"
+            "停止继续清积压并开始正常轮询"
+        )
 
     if max_update_id is None:
         return None
@@ -62,12 +109,16 @@ async def telegram_poll_loop(handler: TelegramUpdateHandler) -> None:
     tg = handler.tg
     offset: Optional[int] = None
     tg_cfg = global_config.telegram_bot
-    timeout = tg_cfg.poll_timeout
-    allowed = tg_cfg.allowed_updates
-    dedup_window = tg_cfg.update_dedup_window if tg_cfg.update_dedup_window > 0 else tg_cfg.dedup_window
+    timeout = _positive_int(getattr(tg_cfg, "poll_timeout", 20), 20)
+    allowed = _normalize_allowed_updates(getattr(tg_cfg, "allowed_updates", ["message"]))
+    shared_dedup_window = _positive_int(getattr(tg_cfg, "dedup_window", 4096), 4096)
+    update_dedup_window_raw = _positive_int(getattr(tg_cfg, "update_dedup_window", 0), 0)
+    dedup_window = update_dedup_window_raw if update_dedup_window_raw > 0 else shared_dedup_window
     seen_update_deduper = SlidingWindowDeduper[int](dedup_window)
+    logger.info(
+        f"启动 Telegram 轮询... timeout={timeout}, allowed_updates={allowed}, update_dedup_window={dedup_window}"
+    )
     offset = await _bootstrap_poll_offset(tg, allowed, seen_update_deduper)
-    logger.info("启动 Telegram 轮询...")
     while True:
         try:
             resp = await tg.get_updates(offset=offset, timeout=timeout, allowed_updates=allowed)
@@ -146,6 +197,17 @@ async def main() -> None:
     # start MaiBot router and TG polling
     router_task = asyncio.create_task(mmc_start_com())
     poll_task = asyncio.create_task(telegram_poll_loop(handler))
+
+    def _log_bg_task_result(name: str, task: asyncio.Task) -> None:
+        try:
+            task.result()
+        except asyncio.CancelledError:
+            return
+        except Exception:
+            logger.exception(f"{name} 任务异常退出")
+
+    router_task.add_done_callback(lambda t: _log_bg_task_result("MaiBot 通信", t))
+    poll_task.add_done_callback(lambda t: _log_bg_task_result("Telegram 轮询", t))
 
     # graceful shutdown on signals
     loop = asyncio.get_running_loop()
