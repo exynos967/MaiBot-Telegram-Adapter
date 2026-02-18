@@ -1,3 +1,4 @@
+from collections import deque
 import time
 import re
 from typing import Any, Dict, List, Optional, Tuple
@@ -13,7 +14,7 @@ from maim_message import (
 
 from ..logger import logger
 from ..config import global_config
-from ..utils import SlidingWindowDeduper, to_base64, is_group_chat, pick_username
+from ..utils import to_base64, is_group_chat, pick_username
 from ..telegram_client import TelegramClient
 from .message_sending import message_send_instance
 
@@ -29,24 +30,34 @@ ACCEPT_FORMAT = [
 
 
 class TelegramUpdateHandler:
+    _MESSAGE_DEDUP_WINDOW = 4096
+
     def __init__(self, tg_client: TelegramClient) -> None:
         self.tg = tg_client
         self.bot_id: Optional[int] = None
         self.bot_username: Optional[str] = None
-        dedup_window = (
-            global_config.telegram_bot.message_dedup_window
-            if global_config.telegram_bot.message_dedup_window > 0
-            else global_config.telegram_bot.dedup_window
-        )
-        self._message_deduper = SlidingWindowDeduper[Tuple[int, int]](dedup_window)
+        self._seen_message_keys: deque[Tuple[int, int]] = deque(maxlen=self._MESSAGE_DEDUP_WINDOW)
+        self._seen_message_key_set: set[Tuple[int, int]] = set()
 
     def set_self(self, bot_id: int, username: Optional[str]) -> None:
         self.bot_id = bot_id
         self.bot_username = username
 
-    def _is_duplicate_message(self, chat_id: int, message_id: int) -> bool:
-        # 同一 chat_id + message_id 视为同一条 Telegram 消息，避免重复投递到 MaiBot。
-        return self._message_deduper.seen_or_add((chat_id, message_id))
+    def _is_duplicate_message(self, chat_id: Optional[int], message_id: Any) -> bool:
+        try:
+            key = (int(chat_id), int(message_id))
+        except (TypeError, ValueError):
+            return False
+
+        if key in self._seen_message_key_set:
+            return True
+
+        evicted = self._seen_message_keys[0] if len(self._seen_message_keys) == self._MESSAGE_DEDUP_WINDOW else None
+        self._seen_message_keys.append(key)
+        self._seen_message_key_set.add(key)
+        if evicted is not None:
+            self._seen_message_key_set.discard(evicted)
+        return False
 
     async def check_allow_to_chat(self, user_id: int, chat_id: Optional[int], chat_type: str) -> bool:
         if is_group_chat(chat_type):
@@ -57,16 +68,11 @@ class TelegramUpdateHandler:
                 logger.warning("群聊在聊天黑名单中，消息被丢弃")
                 return False
         else:
-            # Telegram 私聊场景：chat.id 是对端用户 ID；from.id 是实际发送者（可能为 bot 自己）。
-            # 访问控制应基于“对端用户”，因此优先使用 chat_id。
-            peer_user_id = chat_id if chat_id is not None else user_id
-            if (
-                global_config.chat.private_list_type == "whitelist"
-                and peer_user_id not in global_config.chat.private_list
-            ):
+            # 私聊 ACL 有意按发送者 user_id 过滤（保持上游行为）。
+            if global_config.chat.private_list_type == "whitelist" and user_id not in global_config.chat.private_list:
                 logger.warning("私聊不在聊天白名单中，消息被丢弃")
                 return False
-            if global_config.chat.private_list_type == "blacklist" and peer_user_id in global_config.chat.private_list:
+            if global_config.chat.private_list_type == "blacklist" and user_id in global_config.chat.private_list:
                 logger.warning("私聊在聊天黑名单中，消息被丢弃")
                 return False
         if user_id in global_config.chat.ban_user_id:
@@ -80,30 +86,33 @@ class TelegramUpdateHandler:
             return
 
         message_time = time.time()
-        chat = msg.get("chat") or {}
-        from_user = msg.get("from") or {}
+        chat = msg.get("chat", {})
+        from_user = msg.get("from", {})
         chat_type = chat.get("type") or ""
         chat_id = chat.get("id")
         user_id = from_user.get("id")
+        message_id = msg.get("message_id")
 
         if user_id is None or chat_id is None:
-            logger.debug(
-                f"忽略缺少 user_id/chat_id 的消息: user_id={user_id}, chat_id={chat_id}, chat_type={chat_type}"
-            )
+            logger.debug(f"忽略缺少 user_id/chat_id 的消息: user_id={user_id}, chat_id={chat_id}, chat_type={chat_type}")
             return
 
-        message_id_raw = msg.get("message_id")
         try:
-            message_id = int(message_id_raw)
+            user_id = int(user_id)
+            chat_id = int(chat_id)
         except (TypeError, ValueError):
-            logger.debug(f"忽略缺少或非法 message_id 的消息: message_id={message_id_raw!r}, chat_id={chat_id}")
+            logger.debug(f"忽略非法 user_id/chat_id 的消息: user_id={user_id!r}, chat_id={chat_id!r}, chat_type={chat_type}")
+            return
+
+        try:
+            message_id = int(message_id)
+        except (TypeError, ValueError):
+            logger.debug(f"忽略缺少或非法 message_id 的消息: message_id={message_id!r}, chat_id={chat_id}")
             return
 
         if self._is_duplicate_message(chat_id, message_id):
             logger.debug(f"跳过重复消息: chat_id={chat_id}, message_id={message_id}")
             return
-
-        is_from_bot = self.bot_id is not None and user_id == self.bot_id
 
         if not await self.check_allow_to_chat(user_id, chat_id, chat_type):
             return
@@ -134,9 +143,6 @@ class TelegramUpdateHandler:
         if not seg_list:
             logger.warning("处理后消息内容为空")
             return
-        if is_from_bot:
-            # 不拦截 bot 自发消息；但打标供上游（如需要）区分，避免业务侧误触发循环。
-            additional_config["from_bot"] = True
 
         submit_seg = Seg(type="seglist", data=seg_list)
         message_info = BaseMessageInfo(
