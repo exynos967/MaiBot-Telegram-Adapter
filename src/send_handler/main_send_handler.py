@@ -71,16 +71,6 @@ class SendHandler:
                         )
                         continue
                     result = await tg_sending.tg_message_sender.send_text(normalized_chat_id, text_data, reply_to)
-                    if (
-                        isinstance(result, dict)
-                        and not result.get("ok")
-                        and "message text is empty" in str(result.get("description") or "").lower()
-                    ):
-                        logger.warning(
-                            "Telegram 判定文本为空: "
-                            f"chat_id={normalized_chat_id}, seg_index={seg_idx}, len={len(text_data)}, "
-                            f"repr={text_data[:80]!r}, codepoints={self._preview_codepoints(text_data)}"
-                        )
                     reply_to = None  # 仅第一条携带回复
                 elif seg.type == "image":
                     result = await tg_sending.tg_message_sender.send_image_base64(normalized_chat_id, seg.data)
@@ -131,12 +121,6 @@ class SendHandler:
                 continue
             return True
         return False
-
-    def _preview_codepoints(self, text: str, max_chars: int = 12) -> str:
-        codes = [f"U+{ord(ch):04X}" for ch in text[:max_chars]]
-        if len(text) > max_chars:
-            codes.append("...")
-        return " ".join(codes)
 
     def _normalize_chat_id(self, raw_chat_id: int | str | None) -> int | str | None:
         if raw_chat_id is None:

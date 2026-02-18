@@ -107,7 +107,7 @@ class TelegramClient:
             logger.warning(
                 "sendMessage(JSON) 被判定为空文本，执行一次表单重试: "
                 f"chat_id={chat_id}, status={first_status}, server={first_server}, "
-                f"resp_content_type={first_content_type}, text_len={len(text)}, text_repr={text[:80]!r}"
+                f"resp_content_type={first_content_type}, text_len={len(text)}, reply_to={reply_to}"
             )
 
             form_payload: Dict[str, Any] = {"chat_id": str(chat_id), "text": text}
@@ -128,13 +128,40 @@ class TelegramClient:
                 logger.warning(
                     "sendMessage(JSON) 失败但表单重试成功: "
                     f"chat_id={chat_id}, retry_status={retry_status}, retry_server={retry_server}, "
-                    f"retry_content_type={retry_content_type}"
+                    f"retry_content_type={retry_content_type}, reply_to={reply_to}"
                 )
             else:
                 logger.error(
                     "sendMessage(JSON/FORM) 均失败: "
-                    f"chat_id={chat_id}, first={first_data}, retry={retry_data}"
+                    f"chat_id={chat_id}, reply_to={reply_to}, first={first_data}, retry={retry_data}"
                 )
+
+                # 新诊断：仅在 reply 场景做一次去 reply_parameters 探测，定位是否由回复参数触发。
+                if reply_to is not None and self._is_message_text_empty_error(retry_data):
+                    probe_payload: Dict[str, Any] = {"chat_id": chat_id, "text": text}
+                    probe_body = json.dumps(probe_payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+                    probe_headers = {"Content-Type": "application/json; charset=utf-8"}
+                    async with session.post(
+                        self._url("sendMessage"),
+                        data=probe_body,
+                        headers=probe_headers,
+                        proxy=self._http_proxy(),
+                    ) as resp:
+                        probe_status = resp.status
+                        probe_server = resp.headers.get("Server")
+                        probe_data = await self._read_json_dict(resp)
+                    if probe_data.get("ok"):
+                        logger.warning(
+                            "reply 参数诊断命中：去掉 reply_parameters 后发送成功，"
+                            f"chat_id={chat_id}, original_reply_to={reply_to}, probe_status={probe_status}, "
+                            f"probe_server={probe_server}"
+                        )
+                        return probe_data
+                    logger.warning(
+                        "reply 参数诊断未命中：去掉 reply_parameters 后仍失败，"
+                        f"chat_id={chat_id}, original_reply_to={reply_to}, probe_status={probe_status}, "
+                        f"probe_server={probe_server}, probe={probe_data}"
+                    )
             return retry_data
 
         return first_data
