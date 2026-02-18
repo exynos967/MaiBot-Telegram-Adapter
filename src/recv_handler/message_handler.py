@@ -143,6 +143,7 @@ class TelegramUpdateHandler:
         if not seg_list:
             logger.warning("处理后消息内容为空")
             return
+        additional_config["telegram_chat_id"] = str(chat_id)
 
         submit_seg = Seg(type="seglist", data=seg_list)
         message_info = BaseMessageInfo(

@@ -13,6 +13,51 @@ from src.utils import SlidingWindowDeduper
 import src.send_handler.tg_sending as tg_sending
 
 
+async def _bootstrap_poll_offset(
+    tg: TelegramClient, allowed_updates: list[str], seen_update_deduper: SlidingWindowDeduper[int]
+) -> Optional[int]:
+    """启动时跳过积压更新，避免历史消息被当作新消息重放。"""
+    offset: Optional[int] = None
+    max_update_id: Optional[int] = None
+    skipped = 0
+
+    while True:
+        try:
+            resp = await tg.get_updates(offset=offset, timeout=0, allowed_updates=allowed_updates)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("初始化轮询 offset 失败，将从默认 offset 开始轮询")
+            return None
+
+        if not resp.get("ok"):
+            logger.warning(f"初始化轮询 offset 失败（getUpdates 返回异常）: {resp}")
+            return None
+
+        updates = resp.get("result") or []
+        if not updates:
+            break
+
+        for upd in updates:
+            uid_raw = upd.get("update_id")
+            try:
+                uid = int(uid_raw)
+            except (TypeError, ValueError):
+                continue
+            skipped += 1
+            seen_update_deduper.seen_or_add(uid)
+            max_update_id = uid if max_update_id is None else max(max_update_id, uid)
+
+        if max_update_id is not None:
+            offset = max_update_id + 1
+
+    if max_update_id is None:
+        return None
+
+    logger.info(f"启动时检测到 {skipped} 条积压更新，已跳过到 offset={offset}")
+    return offset
+
+
 async def telegram_poll_loop(handler: TelegramUpdateHandler) -> None:
     tg = handler.tg
     offset: Optional[int] = None
@@ -21,6 +66,7 @@ async def telegram_poll_loop(handler: TelegramUpdateHandler) -> None:
     allowed = tg_cfg.allowed_updates
     dedup_window = tg_cfg.update_dedup_window if tg_cfg.update_dedup_window > 0 else tg_cfg.dedup_window
     seen_update_deduper = SlidingWindowDeduper[int](dedup_window)
+    offset = await _bootstrap_poll_offset(tg, allowed, seen_update_deduper)
     logger.info("启动 Telegram 轮询...")
     while True:
         try:
@@ -83,6 +129,10 @@ async def main() -> None:
             if bot_id:
                 handler.set_self(bot_id, bot_username)
                 logger.info(f"Telegram Self: id={bot_id}, username={bot_username}")
+                logger.info(
+                    f"请确认 MaiBot 的 bot.platforms 包含 telegram:{bot_id}（或 tg:{bot_id}），"
+                    "否则机器人自身消息会被识别为普通用户"
+                )
         else:
             logger.warning(f"getMe 失败: {me}")
     except Exception as e:
