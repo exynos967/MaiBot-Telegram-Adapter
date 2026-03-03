@@ -11,8 +11,8 @@
 1. 安装依赖（使用 uv）
 
 ```bash
-# 推荐使用 uv 同步并创建虚拟环境
-uv sync
+# 推荐使用 uv 创建虚拟环境并安装pip库
+uv pip install -r requirements.txt
 # 如未安装 uv，请参考官方指引安装（或临时：pip install uv）
 ```
 
