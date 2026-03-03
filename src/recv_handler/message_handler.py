@@ -13,7 +13,7 @@ from maim_message import (
 
 from ..logger import logger
 from ..config import global_config
-from ..utils import to_base64, is_group_chat, pick_username
+from ..utils import to_base64, is_group_chat, pick_username, build_topic_group_id
 from ..telegram_client import TelegramClient
 from .message_sending import message_send_instance
 
@@ -69,6 +69,8 @@ class TelegramUpdateHandler:
         chat_type = chat.get("type")
         chat_id = chat.get("id")
         user_id = from_user.get("id")
+        message_thread_id = msg.get("message_thread_id")
+        direct_messages_topic_id = msg.get("direct_messages_topic_id")
 
         if user_id is None or chat_id is None:
             logger.debug("跳过缺少 user_id/chat_id 的消息 update")
@@ -88,9 +90,11 @@ class TelegramUpdateHandler:
         )
         group_info: Optional[GroupInfo] = None
         if is_group_chat(chat_type):
+            # 仅当存在话题信息时虚拟化 group_id，实现“同群不同话题”分流
+            virtual_group_id = build_topic_group_id(chat_id, message_thread_id, direct_messages_topic_id)
             group_info = GroupInfo(
                 platform=global_config.maibot_server.platform_name,
-                group_id=str(chat_id),
+                group_id=virtual_group_id,
                 group_name=chat.get("title"),
             )
 

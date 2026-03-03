@@ -9,7 +9,7 @@ from maim_message import (
 )
 
 from ..logger import logger
-from ..config import global_config
+from ..utils import parse_topic_group_id
 from . import tg_sending
 
 
@@ -35,8 +35,12 @@ class SendHandler:
 
         # 确定目标 chat_id
         chat_id: int | str | None = None
+        parsed_message_thread_id: int | None = None
+        parsed_direct_messages_topic_id: int | None = None
         if group_info and group_info.group_id:
-            chat_id = group_info.group_id
+            chat_id, parsed_message_thread_id, parsed_direct_messages_topic_id = parse_topic_group_id(
+                group_info.group_id
+            )
         elif user_info and user_info.user_id:
             chat_id = user_info.user_id
         else:
@@ -46,6 +50,10 @@ class SendHandler:
         # 解析 reply 目标
         reply_to: int | None = self._extract_reply(message_segment, message_info)
         message_thread_id, direct_messages_topic_id = self._extract_topics(message_info)
+        if message_thread_id is None:
+            message_thread_id = parsed_message_thread_id
+        if direct_messages_topic_id is None:
+            direct_messages_topic_id = parsed_direct_messages_topic_id
 
         # 扁平化 seglist 后按顺序发送（简单串行，避免复杂聚合）
         payloads = self._recursively_flatten(message_segment)
