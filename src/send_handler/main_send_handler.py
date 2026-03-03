@@ -45,6 +45,7 @@ class SendHandler:
 
         # 解析 reply 目标
         reply_to: int | None = self._extract_reply(message_segment, message_info)
+        message_thread_id, direct_messages_topic_id = self._extract_topics(message_info)
 
         # 扁平化 seglist 后按顺序发送（简单串行，避免复杂聚合）
         payloads = self._recursively_flatten(message_segment)
@@ -52,22 +53,72 @@ class SendHandler:
             logger.warning("消息段为空，不发送")
             return
 
+        replied = False
         for seg in payloads:
+            current_reply_to = None if replied else reply_to
             if seg.type == "text":
-                await tg_sending.tg_message_sender.send_text(chat_id, seg.data, reply_to)
-                reply_to = None  # 仅第一条携带回复
+                await tg_sending.tg_message_sender.send_text(
+                    chat_id,
+                    seg.data,
+                    current_reply_to,
+                    message_thread_id=message_thread_id,
+                    direct_messages_topic_id=direct_messages_topic_id,
+                )
+                replied = True
             elif seg.type == "image":
-                await tg_sending.tg_message_sender.send_image_base64(chat_id, seg.data)
+                await tg_sending.tg_message_sender.send_image_base64(
+                    chat_id,
+                    seg.data,
+                    reply_to=current_reply_to,
+                    message_thread_id=message_thread_id,
+                    direct_messages_topic_id=direct_messages_topic_id,
+                )
+                replied = True
             elif seg.type == "imageurl":
-                await tg_sending.tg_message_sender.send_image_url(chat_id, seg.data)
+                await tg_sending.tg_message_sender.send_image_url(
+                    chat_id,
+                    seg.data,
+                    reply_to=current_reply_to,
+                    message_thread_id=message_thread_id,
+                    direct_messages_topic_id=direct_messages_topic_id,
+                )
+                replied = True
             elif seg.type == "voice":
-                await tg_sending.tg_message_sender.send_voice_base64(chat_id, seg.data)
+                await tg_sending.tg_message_sender.send_voice_base64(
+                    chat_id,
+                    seg.data,
+                    reply_to=current_reply_to,
+                    message_thread_id=message_thread_id,
+                    direct_messages_topic_id=direct_messages_topic_id,
+                )
+                replied = True
             elif seg.type == "videourl":
-                await tg_sending.tg_message_sender.send_video_url(chat_id, seg.data)
+                await tg_sending.tg_message_sender.send_video_url(
+                    chat_id,
+                    seg.data,
+                    reply_to=current_reply_to,
+                    message_thread_id=message_thread_id,
+                    direct_messages_topic_id=direct_messages_topic_id,
+                )
+                replied = True
             elif seg.type == "file":
-                await tg_sending.tg_message_sender.send_document_url(chat_id, seg.data)
+                await tg_sending.tg_message_sender.send_document_url(
+                    chat_id,
+                    seg.data,
+                    reply_to=current_reply_to,
+                    message_thread_id=message_thread_id,
+                    direct_messages_topic_id=direct_messages_topic_id,
+                )
+                replied = True
             elif seg.type == "emoji":
-                await tg_sending.tg_message_sender.send_animation_base64(chat_id, seg.data)
+                await tg_sending.tg_message_sender.send_animation_base64(
+                    chat_id,
+                    seg.data,
+                    reply_to=current_reply_to,
+                    message_thread_id=message_thread_id,
+                    direct_messages_topic_id=direct_messages_topic_id,
+                )
+                replied = True
             else:
                 logger.debug(f"跳过不支持的发送类型: {seg.type}")
 
@@ -105,6 +156,25 @@ class SendHandler:
             return None
 
         return _walk(seg_data)
+
+    def _extract_topics(self, message_info: BaseMessageInfo) -> tuple[int | None, int | None]:
+        additional = getattr(message_info, "additional_config", None) or {}
+
+        def _safe_int(value: Any) -> int | None:
+            if value is None:
+                return None
+            try:
+                return int(value)
+            except Exception:
+                return None
+
+        # 兼容可能的历史字段命名
+        message_thread_id = _safe_int(additional.get("message_thread_id"))
+        if message_thread_id is None:
+            message_thread_id = _safe_int(additional.get("thread_id"))
+
+        direct_messages_topic_id = _safe_int(additional.get("direct_messages_topic_id"))
+        return message_thread_id, direct_messages_topic_id
 
 
 send_handler = SendHandler()

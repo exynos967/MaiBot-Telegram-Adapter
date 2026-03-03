@@ -1,4 +1,5 @@
 import asyncio
+import json
 from typing import Any, Dict, List, Optional
 
 import aiohttp
@@ -44,6 +45,38 @@ class TelegramClient:
     def _url(self, method: str) -> str:
         return f"{self.api_base}/bot{self.token}/{method}"
 
+    @staticmethod
+    def _append_reply_to_payload(payload: Dict[str, Any], reply_to: Optional[int]) -> None:
+        if reply_to is not None:
+            payload["reply_parameters"] = {"message_id": reply_to}
+
+    @staticmethod
+    def _append_reply_to_form(form: aiohttp.FormData, reply_to: Optional[int]) -> None:
+        if reply_to is not None:
+            form.add_field("reply_parameters", json.dumps({"message_id": reply_to}))
+
+    @staticmethod
+    def _append_topic_to_payload(
+        payload: Dict[str, Any],
+        message_thread_id: Optional[int],
+        direct_messages_topic_id: Optional[int],
+    ) -> None:
+        if message_thread_id is not None:
+            payload["message_thread_id"] = message_thread_id
+        if direct_messages_topic_id is not None:
+            payload["direct_messages_topic_id"] = direct_messages_topic_id
+
+    @staticmethod
+    def _append_topic_to_form(
+        form: aiohttp.FormData,
+        message_thread_id: Optional[int],
+        direct_messages_topic_id: Optional[int],
+    ) -> None:
+        if message_thread_id is not None:
+            form.add_field("message_thread_id", str(message_thread_id))
+        if direct_messages_topic_id is not None:
+            form.add_field("direct_messages_topic_id", str(direct_messages_topic_id))
+
     async def get_me(self) -> Dict[str, Any]:
         session = await self.ensure_session()
         async with session.get(self._url("getMe"), proxy=self._http_proxy()) as resp:
@@ -84,82 +117,143 @@ class TelegramClient:
             resp.raise_for_status()
             return await resp.read()
 
-    async def send_message(self, chat_id: int | str, text: str, reply_to: Optional[int] = None) -> Dict[str, Any]:
+    async def send_message(
+        self,
+        chat_id: int | str,
+        text: str,
+        reply_to: Optional[int] = None,
+        message_thread_id: Optional[int] = None,
+        direct_messages_topic_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
         session = await self.ensure_session()
         payload: Dict[str, Any] = {"chat_id": chat_id, "text": text}
-        if reply_to is not None:
-            payload["reply_parameters"] = {"message_id": reply_to}
+        self._append_reply_to_payload(payload, reply_to)
+        self._append_topic_to_payload(payload, message_thread_id, direct_messages_topic_id)
         async with session.post(
             self._url("sendMessage"), json=payload, proxy=self._http_proxy()
         ) as resp:
             return await resp.json()
 
-    async def send_photo_by_bytes(self, chat_id: int | str, photo_bytes: bytes, caption: Optional[str] = None) -> Dict[str, Any]:
+    async def send_photo_by_bytes(
+        self,
+        chat_id: int | str,
+        photo_bytes: bytes,
+        caption: Optional[str] = None,
+        reply_to: Optional[int] = None,
+        message_thread_id: Optional[int] = None,
+        direct_messages_topic_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
         session = await self.ensure_session()
         form = aiohttp.FormData()
         form.add_field("chat_id", str(chat_id))
         if caption:
             form.add_field("caption", caption)
+        self._append_reply_to_form(form, reply_to)
+        self._append_topic_to_form(form, message_thread_id, direct_messages_topic_id)
         form.add_field("photo", photo_bytes, filename="image.jpg", content_type="image/jpeg")
         async with session.post(
             self._url("sendPhoto"), data=form, proxy=self._http_proxy()
         ) as resp:
             return await resp.json()
 
-    async def send_photo_by_url(self, chat_id: int | str, url: str, caption: Optional[str] = None) -> Dict[str, Any]:
+    async def send_photo_by_url(
+        self,
+        chat_id: int | str,
+        url: str,
+        caption: Optional[str] = None,
+        reply_to: Optional[int] = None,
+        message_thread_id: Optional[int] = None,
+        direct_messages_topic_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
         session = await self.ensure_session()
         payload: Dict[str, Any] = {"chat_id": chat_id, "photo": url}
         if caption:
             payload["caption"] = caption
+        self._append_reply_to_payload(payload, reply_to)
+        self._append_topic_to_payload(payload, message_thread_id, direct_messages_topic_id)
         async with session.post(
             self._url("sendPhoto"), json=payload, proxy=self._http_proxy()
         ) as resp:
             return await resp.json()
 
     async def send_voice_by_bytes(
-        self, chat_id: int | str, voice_bytes: bytes, caption: Optional[str] = None
+        self,
+        chat_id: int | str,
+        voice_bytes: bytes,
+        caption: Optional[str] = None,
+        reply_to: Optional[int] = None,
+        message_thread_id: Optional[int] = None,
+        direct_messages_topic_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         session = await self.ensure_session()
         form = aiohttp.FormData()
         form.add_field("chat_id", str(chat_id))
         if caption:
             form.add_field("caption", caption)
+        self._append_reply_to_form(form, reply_to)
+        self._append_topic_to_form(form, message_thread_id, direct_messages_topic_id)
         form.add_field("voice", voice_bytes, filename="voice.ogg", content_type="audio/ogg")
         async with session.post(
             self._url("sendVoice"), data=form, proxy=self._http_proxy()
         ) as resp:
             return await resp.json()
 
-    async def send_video_by_url(self, chat_id: int | str, url: str, caption: Optional[str] = None) -> Dict[str, Any]:
+    async def send_video_by_url(
+        self,
+        chat_id: int | str,
+        url: str,
+        caption: Optional[str] = None,
+        reply_to: Optional[int] = None,
+        message_thread_id: Optional[int] = None,
+        direct_messages_topic_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
         session = await self.ensure_session()
         payload: Dict[str, Any] = {"chat_id": chat_id, "video": url}
         if caption:
             payload["caption"] = caption
+        self._append_reply_to_payload(payload, reply_to)
+        self._append_topic_to_payload(payload, message_thread_id, direct_messages_topic_id)
         async with session.post(
             self._url("sendVideo"), json=payload, proxy=self._http_proxy()
         ) as resp:
             return await resp.json()
 
     async def send_document_by_url(
-        self, chat_id: int | str, url: str, caption: Optional[str] = None
+        self,
+        chat_id: int | str,
+        url: str,
+        caption: Optional[str] = None,
+        reply_to: Optional[int] = None,
+        message_thread_id: Optional[int] = None,
+        direct_messages_topic_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         session = await self.ensure_session()
         payload: Dict[str, Any] = {"chat_id": chat_id, "document": url}
         if caption:
             payload["caption"] = caption
+        self._append_reply_to_payload(payload, reply_to)
+        self._append_topic_to_payload(payload, message_thread_id, direct_messages_topic_id)
         async with session.post(
             self._url("sendDocument"), json=payload, proxy=self._http_proxy()
         ) as resp:
             return await resp.json()
 
     async def send_animation_by_bytes(
-        self, chat_id: int | str, anim_bytes: bytes, caption: Optional[str] = None
+        self,
+        chat_id: int | str,
+        anim_bytes: bytes,
+        caption: Optional[str] = None,
+        reply_to: Optional[int] = None,
+        message_thread_id: Optional[int] = None,
+        direct_messages_topic_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         session = await self.ensure_session()
         form = aiohttp.FormData()
         form.add_field("chat_id", str(chat_id))
         if caption:
             form.add_field("caption", caption)
+        self._append_reply_to_form(form, reply_to)
+        self._append_topic_to_form(form, message_thread_id, direct_messages_topic_id)
         form.add_field("animation", anim_bytes, filename="animation.gif", content_type="image/gif")
         async with session.post(
             self._url("sendAnimation"), data=form, proxy=self._http_proxy()

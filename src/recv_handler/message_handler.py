@@ -38,7 +38,7 @@ class TelegramUpdateHandler:
         self.bot_id = bot_id
         self.bot_username = username
 
-    async def check_allow_to_chat(self, user_id: int, chat_id: Optional[int], chat_type: str) -> bool:
+    async def check_allow_to_chat(self, user_id: int, chat_id: Optional[int], chat_type: Optional[str]) -> bool:
         if is_group_chat(chat_type):
             if global_config.chat.group_list_type == "whitelist" and chat_id not in global_config.chat.group_list:
                 logger.warning("群聊不在聊天白名单中，消息被丢弃")
@@ -69,6 +69,10 @@ class TelegramUpdateHandler:
         chat_type = chat.get("type")
         chat_id = chat.get("id")
         user_id = from_user.get("id")
+
+        if user_id is None or chat_id is None:
+            logger.debug("跳过缺少 user_id/chat_id 的消息 update")
+            return
 
         if not await self.check_allow_to_chat(user_id, chat_id, chat_type):
             return
@@ -119,6 +123,12 @@ class TelegramUpdateHandler:
         segs: List[Seg] = []
         additional: Dict[str, Any] = {}
 
+        # 为后续链路保留 topic 信息，便于按原线程回发
+        if msg.get("message_thread_id") is not None:
+            additional["message_thread_id"] = msg.get("message_thread_id")
+        if msg.get("direct_messages_topic_id") is not None:
+            additional["direct_messages_topic_id"] = msg.get("direct_messages_topic_id")
+
         # reply 信息（尽量简化，后续可精细化）
         reply_to = msg.get("reply_to_message")
         if reply_to:
@@ -138,6 +148,8 @@ class TelegramUpdateHandler:
         # 文本
         if msg.get("text"):
             segs.append(Seg(type="text", data=msg["text"]))
+        if msg.get("caption"):
+            segs.append(Seg(type="text", data=msg["caption"]))
 
         # 图片
         photos = msg.get("photo") or []
@@ -256,7 +268,7 @@ class TelegramUpdateHandler:
                 try:
                     offset = int(ent.get("offset", 0))
                     length = int(ent.get("length", 0))
-                    token = base_text[offset : offset + length]
+                    token = self._slice_by_utf16_units(base_text, offset, length)
                     if uname_lower and token.lower() == f"@{uname_lower}":
                         logger.debug(f"@识别: mention 实体命中 token='{token}'")
                         return True
@@ -267,7 +279,7 @@ class TelegramUpdateHandler:
                 try:
                     offset = int(ent.get("offset", 0))
                     length = int(ent.get("length", 0))
-                    token = base_text[offset : offset + length]
+                    token = self._slice_by_utf16_units(base_text, offset, length)
                     if uname_lower and f"@{uname_lower}" in token.lower():
                         logger.debug(f"@识别: bot_command 实体命中 token='{token}'")
                         return True
@@ -280,4 +292,14 @@ class TelegramUpdateHandler:
                     return True
         return False
 
-        return segs or None, additional
+    @staticmethod
+    def _slice_by_utf16_units(text: str, offset: int, length: int) -> str:
+        # Telegram 的 MessageEntity offset/length 基于 UTF-16 code units
+        if offset < 0 or length <= 0:
+            return ""
+        raw = text.encode("utf-16-le")
+        start = offset * 2
+        end = (offset + length) * 2
+        if start >= len(raw):
+            return ""
+        return raw[start:end].decode("utf-16-le", errors="ignore")

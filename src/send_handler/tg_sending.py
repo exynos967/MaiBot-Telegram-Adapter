@@ -20,10 +20,31 @@ class TGMessageSender:
         # 暂不回传，后续可扩展：
         # await message_send_instance.send_custom_message({...}, platform, "message_id_echo")
 
-    async def send_text(self, chat_id: int | str, text: str, reply_to: Optional[int] = None) -> Dict[str, Any]:
-        return await self.client.send_message(chat_id, text, reply_to)
+    async def send_text(
+        self,
+        chat_id: int | str,
+        text: str,
+        reply_to: Optional[int] = None,
+        message_thread_id: Optional[int] = None,
+        direct_messages_topic_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        return await self.client.send_message(
+            chat_id,
+            text,
+            reply_to=reply_to,
+            message_thread_id=message_thread_id,
+            direct_messages_topic_id=direct_messages_topic_id,
+        )
 
-    async def send_image_base64(self, chat_id: int | str, b64: str, caption: Optional[str] = None) -> Dict[str, Any]:
+    async def send_image_base64(
+        self,
+        chat_id: int | str,
+        b64: str,
+        caption: Optional[str] = None,
+        reply_to: Optional[int] = None,
+        message_thread_id: Optional[int] = None,
+        direct_messages_topic_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
         import base64
 
         try:
@@ -31,12 +52,42 @@ class TGMessageSender:
         except Exception as e:
             logger.error(f"图片base64解析失败: {e}")
             return {"ok": False, "description": "invalid base64"}
-        return await self.client.send_photo_by_bytes(chat_id, image_bytes, caption)
+        return await self.client.send_photo_by_bytes(
+            chat_id,
+            image_bytes,
+            caption,
+            reply_to,
+            message_thread_id,
+            direct_messages_topic_id,
+        )
 
-    async def send_image_url(self, chat_id: int | str, url: str, caption: Optional[str] = None) -> Dict[str, Any]:
-        return await self.client.send_photo_by_url(chat_id, url, caption)
+    async def send_image_url(
+        self,
+        chat_id: int | str,
+        url: str,
+        caption: Optional[str] = None,
+        reply_to: Optional[int] = None,
+        message_thread_id: Optional[int] = None,
+        direct_messages_topic_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        return await self.client.send_photo_by_url(
+            chat_id,
+            url,
+            caption,
+            reply_to,
+            message_thread_id,
+            direct_messages_topic_id,
+        )
 
-    async def send_voice_base64(self, chat_id: int | str, b64: str, caption: Optional[str] = None) -> Dict[str, Any]:
+    async def send_voice_base64(
+        self,
+        chat_id: int | str,
+        b64: str,
+        caption: Optional[str] = None,
+        reply_to: Optional[int] = None,
+        message_thread_id: Optional[int] = None,
+        direct_messages_topic_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
         import base64
 
         try:
@@ -44,15 +95,60 @@ class TGMessageSender:
         except Exception as e:
             logger.error(f"语音base64解析失败: {e}")
             return {"ok": False, "description": "invalid base64"}
-        return await self.client.send_voice_by_bytes(chat_id, voice_bytes, caption)
+        return await self.client.send_voice_by_bytes(
+            chat_id,
+            voice_bytes,
+            caption,
+            reply_to,
+            message_thread_id,
+            direct_messages_topic_id,
+        )
 
-    async def send_video_url(self, chat_id: int | str, url: str, caption: Optional[str] = None) -> Dict[str, Any]:
-        return await self.client.send_video_by_url(chat_id, url, caption)
+    async def send_video_url(
+        self,
+        chat_id: int | str,
+        url: str,
+        caption: Optional[str] = None,
+        reply_to: Optional[int] = None,
+        message_thread_id: Optional[int] = None,
+        direct_messages_topic_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        return await self.client.send_video_by_url(
+            chat_id,
+            url,
+            caption,
+            reply_to,
+            message_thread_id,
+            direct_messages_topic_id,
+        )
 
-    async def send_document_url(self, chat_id: int | str, url: str, caption: Optional[str] = None) -> Dict[str, Any]:
-        return await self.client.send_document_by_url(chat_id, url, caption)
+    async def send_document_url(
+        self,
+        chat_id: int | str,
+        url: str,
+        caption: Optional[str] = None,
+        reply_to: Optional[int] = None,
+        message_thread_id: Optional[int] = None,
+        direct_messages_topic_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        return await self.client.send_document_by_url(
+            chat_id,
+            url,
+            caption,
+            reply_to,
+            message_thread_id,
+            direct_messages_topic_id,
+        )
 
-    async def send_animation_base64(self, chat_id: int | str, b64: str, caption: Optional[str] = None) -> Dict[str, Any]:
+    async def send_animation_base64(
+        self,
+        chat_id: int | str,
+        b64: str,
+        caption: Optional[str] = None,
+        reply_to: Optional[int] = None,
+        message_thread_id: Optional[int] = None,
+        direct_messages_topic_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
         import base64
 
         try:
@@ -60,7 +156,14 @@ class TGMessageSender:
         except Exception as e:
             logger.error(f"动图base64解析失败: {e}")
             return {"ok": False, "description": "invalid base64"}
-        return await self.client.send_animation_by_bytes(chat_id, anim_bytes, caption)
+        return await self.client.send_animation_by_bytes(
+            chat_id,
+            anim_bytes,
+            caption,
+            reply_to,
+            message_thread_id,
+            direct_messages_topic_id,
+        )
 
 
 tg_message_sender: TGMessageSender | None = None
