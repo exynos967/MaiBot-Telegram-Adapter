@@ -74,19 +74,17 @@ cd MaiBot-Telegram-Adapter
 推荐使用 [uv](https://docs.astral.sh/uv/) 进行依赖管理：
 
 ```bash
-uv pip install -r requirements.txt
+uv venv
 ```
 
-或使用 pip：
-
 ```bash
-pip install -r requirements.txt
+uv pip install -r requirements.txt
 ```
 
 ### 3. 生成配置文件
 
 ```bash
-python main.py
+uv run main.py
 ```
 
 首次运行会自动生成 `config.toml` 配置文件并退出，提示你填写必要配置。
