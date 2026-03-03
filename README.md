@@ -1,112 +1,263 @@
-# MaiBot 与 Telegram 的 Adapter
+![:name](https://count.getloli.com/@:MaiBot-Telegram-Adapter?name=%3AMaiBot-Telegram-Adapter&theme=miku&padding=7&offset=0&align=top&scale=1&pixelated=1&darkmode=auto)
 
-运行方式：独立 MaiBot 运行。
+# MaiBot-Telegram-Adapter
 
-## 如果遇到bug，或者有想添加的新功能请积极反馈
+<div align="center">
+
+**MaiBot 的 Telegram 平台适配器**
+
+将 Telegram Bot 与 [MaiBot](https://github.com/Mai-with-u/MaiBot) AI 聊天核心无缝桥接
+
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![maim_message](https://img.shields.io/badge/protocol-maim__message-orange)](https://github.com/Mai-with-u/maim_message)
+
+</div>
+
+---
+
+## 简介
+
+MaiBot-Telegram-Adapter 是 MaiBot 生态系统中的 Telegram 平台适配器，作为独立进程运行，负责在 Telegram Bot API 与 MaiBot Core 之间进行双向消息协议转换。
+
+**工作方式：**
+
+```
+Telegram 用户 ⇄ Telegram Bot API ⇄ 本适配器 ⇄ MaiBot Core (WebSocket)
+```
+
+- **入站**（TG → MaiBot）：通过长轮询接收 Telegram 消息，解析为 `maim_message` 标准格式，经 WebSocket 转发至 MaiBot Core
+- **出站**（MaiBot → TG）：接收 MaiBot Core 的响应，调用 Telegram Bot API 发送到对应的聊天
+
+## 功能特性
+
+### 消息类型支持
+
+| 消息类型 | 入站（TG → MaiBot） | 出站（MaiBot → TG） |
+| :---: | :---: | :---: |
+| 文本 | ✅ | ✅ |
+| 图片 | ✅ 自动下载转 base64 | ✅ base64 / URL |
+| 语音 | ✅ 自动下载转 base64 | ✅ base64 |
+| 贴纸 | ✅ 转 emoji 类型 | ✅ 以动图发送 |
+| GIF 动图 | ✅ 转 emoji 类型 | ✅ 以动图发送 |
+| 视频 | — | ✅ URL |
+| 文件 | ✅ 转文本标记 | ✅ URL |
+| 回复消息 | ✅ 关联消息 ID | ✅ reply_parameters |
+| @Bot | ✅ 多种识别方式 | — |
+
+### 其他特性
+
+- **黑白名单**：群组和私聊分别支持白名单/黑名单模式，支持全局封禁用户
+- **代理支持**：HTTP / HTTPS / SOCKS5 代理，支持从环境变量读取
+- **自定义 API 地址**：可配置 Telegram API 基础地址（适用于自建 API 代理）
+- **配置版本管理**：配置文件自动升级，旧配置自动备份
+- **双通道日志**：适配器日志与 `maim_message` 子系统日志独立控制级别
+- **Update 去重**：防止重复处理 Telegram 消息
 
 ## 快速开始
 
-推荐使用uv
+### 前置要求
 
-1. 安装依赖（使用 uv）
+- **Python 3.10+**
+- 已部署并运行的 **MaiBot Core** 实例
+- Telegram Bot Token（从 [@BotFather](https://t.me/BotFather) 获取）
+
+### 1. 克隆仓库
 
 ```bash
-# 推荐使用 uv 创建虚拟环境并安装pip库
+git clone https://github.com/exynos967/MaiBot-Telegram-Adapter.git
+cd MaiBot-Telegram-Adapter
+```
+
+### 2. 安装依赖
+
+推荐使用 [uv](https://docs.astral.sh/uv/) 进行依赖管理：
+
+```bash
 uv pip install -r requirements.txt
-# 如未安装 uv，请参考官方指引安装（或临时：pip install uv）
 ```
 
-2. 生成并填写配置
+或使用 pip：
 
 ```bash
-python MaiBot-Telegram-Adapter\main.py  # 首次运行会生成 config.toml 并退出（Windows 示例）
-# 或
-python MaiBot-Telegram-Adapter/main.py    # Linux/macOS 示例
+pip install -r requirements.txt
 ```
 
-编辑 `config.toml`：
+### 3. 生成配置文件
 
-- `telegram_bot.token`：Telegram Bot Token（向 @BotFather 申请）
-- `maibot_server.host/port`：MaiBot Core WebSocket 服务（如 `ws://host:port/ws`）
-- `chat`：黑白名单策略
-- 代理（国内服务器需要配置）：
-  - `telegram_bot.proxy_enabled = true`
-  - `telegram_bot.proxy_url = "socks5://127.0.0.1:1080"` 或 `http://127.0.0.1:7890`
-  - `telegram_bot.proxy_from_env = true` 可从环境变量 `HTTP_PROXY/HTTPS_PROXY/NO_PROXY` 读取
+```bash
+python main.py
+```
 
-3. 运行（使用 uv）
+首次运行会自动生成 `config.toml` 配置文件并退出，提示你填写必要配置。
+
+### 4. 编辑配置
+
+编辑项目目录下的 `config.toml`，至少填写以下内容：
+
+```toml
+[telegram_bot]
+token = "你的Bot Token"       # 必填
+
+[maibot_server]
+host = "localhost"             # MaiBot Core 地址
+port = 8000                    # MaiBot Core 端口
+```
+
+> 详细配置说明见下方 [配置说明](#配置说明) 章节。
+
+### 5. 启动适配器
 
 ```bash
 uv run python main.py
+# 或
+python main.py
 ```
 
-## 设计目标
+## 创建 Telegram Bot
 
-- 解耦、模块化：发送（MaiBot→TG）与接收（TG→MaiBot）分离
-- 可扩展：按 Seg 类型扩展收发能力（text/image/voice/...）
-- 对齐 `maim_message` 标准：统一的 MessageBase/Seg 适配
-- 配置驱动：与 Napcat 适配器一致的模板化配置升级流程
+1. 在 Telegram 中搜索 [@BotFather](https://t.me/BotFather)，点击 **Start**
+2. 发送 `/newbot`，按提示输入机器人名称和用户名
+3. 创建成功后获得 Bot Token，填入 `config.toml`
 
-## 目录结构
+### 群聊配置
+
+如需在群聊中使用，**必须关闭 Bot 的 Privacy Mode**：
+
+1. 向 BotFather 发送 `/setprivacy`
+2. 选择你的 Bot
+3. 选择 **Disable**
+
+> 关闭 Privacy Mode 后，Bot 才能接收群组中所有消息，而非仅 @ 消息和命令。
+
+## 配置说明
+
+### `[telegram_bot]` — Telegram Bot 设置
+
+| 配置项 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `token` | string | `""` | **必填** Telegram Bot Token |
+| `api_base` | string | `https://api.telegram.org` | API 基础地址（自建代理时修改） |
+| `poll_timeout` | int | `20` | 长轮询超时时间（秒） |
+| `allowed_updates` | list | `["message", "edited_message"]` | 监听的 Update 类型 |
+| `proxy_enabled` | bool | `false` | 是否启用代理 |
+| `proxy_url` | string | `""` | 代理地址 |
+| `proxy_from_env` | bool | `false` | 从环境变量读取代理 |
+
+### `[maibot_server]` — MaiBot Core 连接
+
+| 配置项 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `host` | string | `localhost` | MaiBot Core 主机地址 |
+| `port` | int | `8000` | MaiBot Core 端口 |
+
+适配器将连接 `ws://<host>:<port>/ws`。
+
+### `[chat]` — 消息过滤
+
+| 配置项 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `group_list_type` | string | `whitelist` | 群组过滤模式：`whitelist` / `blacklist` |
+| `group_list` | list[int] | `[]` | 群组 ID 列表 |
+| `private_list_type` | string | `whitelist` | 私聊过滤模式：`whitelist` / `blacklist` |
+| `private_list` | list[int] | `[]` | 用户 ID 列表 |
+| `ban_user_id` | list[int] | `[]` | 全局封禁的用户 ID |
+
+> **白名单模式**下，列表为空时不会响应任何消息，需要手动添加允许的群组/用户 ID。
+
+### `[debug]` — 日志配置
+
+| 配置项 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `level` | string | `INFO` | 适配器日志级别 |
+| `maim_message_level` | string | `INFO` | maim_message 子系统日志级别 |
+| `to_file` | bool | `false` | 是否输出日志文件 |
+| `file_path` | string | `logs/telegram-adapter.log` | 日志文件路径 |
+| `rotation` | string | `10 MB` | 日志轮转策略 |
+| `retention` | string | `7 days` | 日志保留策略 |
+| `serialize` | bool | `false` | 文件日志是否输出 JSON 格式 |
+| `backtrace` | bool | `false` | 异常时输出完整堆栈回溯 |
+| `diagnose` | bool | `false` | 输出详细诊断信息 |
+
+**环境变量覆盖：**
+
+| 环境变量 | 对应配置项 |
+| --- | --- |
+| `LOG_LEVEL` | `debug.level` |
+| `LOG_MM_LEVEL` | `debug.maim_message_level` |
+| `LOG_FILE` | `debug.file_path` |
+| `LOG_SERIALIZE` | `debug.serialize`（`"1"` 或 `"true"` 启用） |
+
+### 代理配置
+
+在中国大陆服务器上运行时，需要配置代理才能访问 Telegram API：
+
+```toml
+[telegram_bot]
+proxy_enabled = true
+proxy_url = "socks5://127.0.0.1:1080"   # SOCKS5 代理
+# proxy_url = "http://127.0.0.1:7890"   # 或 HTTP 代理
+```
+
+也可以通过环境变量方式：
+
+```toml
+[telegram_bot]
+proxy_from_env = true   # 自动读取 HTTP_PROXY / HTTPS_PROXY / NO_PROXY
+```
+
+## 项目结构
 
 ```
 MaiBot-Telegram-Adapter/
-  ├─ main.py                # 入口，启动 Telegram 轮询与 MaiBot 路由
-  ├─ requirements.txt
-  ├─ pyproject.toml
-  ├─ template/template_config.toml
-  └─ src/
-      ├─ logger.py
-      ├─ utils.py
-      ├─ telegram_client.py
-      ├─ mmc_com_layer.py
-      ├─ config/
-      │   ├─ config.py
-      │   ├─ config_base.py
-      │   └─ official_configs.py
-      ├─ recv_handler/
-      │   ├─ message_handler.py
-      │   └─ message_sending.py
-      └─ send_handler/
-          ├─ main_send_handler.py
-          └─ tg_sending.py
+├── main.py                          # 程序入口：启动轮询与路由
+├── requirements.txt                 # Python 依赖
+├── pyproject.toml                   # 项目元数据与代码规范配置
+├── template/
+│   └── template_config.toml         # 配置文件模板
+└── src/
+    ├── logger.py                    # 日志系统（loguru 双通道）
+    ├── utils.py                     # 工具函数（base64 编码、群聊判断等）
+    ├── telegram_client.py           # Telegram Bot API 异步客户端
+    ├── mmc_com_layer.py             # MaiBot 通信层（WebSocket 路由）
+    ├── config/
+    │   ├── config.py                # 配置加载、版本升级、自动备份
+    │   ├── config_base.py           # 配置基类（dataclass 反射）
+    │   └── official_configs.py      # 各配置节定义
+    ├── recv_handler/
+    │   ├── message_handler.py       # TG 消息解析 → maim_message 构建
+    │   └── message_sending.py       # 向 MaiBot Core 发送消息
+    └── send_handler/
+        ├── main_send_handler.py     # MaiBot 响应分发
+        └── tg_sending.py           # Telegram 各类型消息发送
 ```
 
-## 支持特性（初版）
-
-- 入站（TG→MaiBot）：文本、图片（自动下载并转 base64）
-- 出站（MaiBot→TG）：文本、图片（base64/URL）
-- 黑白名单：与 0.7.0+ 规范一致（适配器侧校验）
- - 日志：可配置级别（TRACE/DEBUG/INFO/WARNING/ERROR/CRITICAL），支持独立 maim_message 级别；可选文件输出（轮转/保留/JSON）
-
-### 日志配置说明（片段）
+## 架构概览
 
 ```
-[debug]
-level = "INFO"                       # 适配器日志级别：TRACE/DEBUG/INFO/WARNING/ERROR/CRITICAL
-maim_message_level = "INFO"          # maim_message 子系统日志级别
-to_file = false                       # 是否写入文件
-file_path = "logs/telegram-adapter.log"
-rotation = "10 MB"                   # 轮转大小或时间：如 "10 MB"、"1 day"
-retention = "7 days"                 # 保留时间或数量：如 "7 days"、"14 files"
-serialize = false                    # 文件日志输出 JSON
-backtrace = false                    # 异常时输出完整回溯
-diagnose = false                     # 更详细的异常诊断
+┌──────────────────────────────────────────────────┐
+│              MaiBot-Telegram-Adapter              │
+│                                                   │
+│   ┌──────────────┐         ┌──────────────────┐  │
+│   │ TelegramClient│        │  mmc_com_layer   │  │
+│   │  (aiohttp)   │        │ (maim_message    │  │
+│   │              │        │  Router/WS)      │  │
+│   └──────┬───────┘         └────────┬─────────┘  │
+│          │                          │             │
+│   ┌──────┴───────┐         ┌────────┴─────────┐  │
+│   │ recv_handler │         │  send_handler    │  │
+│   │ TG → MaiBot  │         │  MaiBot → TG     │  │
+│   └──────────────┘         └──────────────────┘  │
+│                                                   │
+└──────────────────────────────────────────────────┘
+        ↕ HTTPS                      ↕ WebSocket
+   Telegram API               MaiBot Core (AI)
 ```
 
-也可用环境变量覆盖：`LOG_LEVEL`、`LOG_MM_LEVEL`、`LOG_FILE`、`LOG_SERIALIZE`（"1"/"true"）。
+## 反馈与贡献
 
-## 接入 Telegram
+如果遇到 Bug 或有功能建议，欢迎通过 [Issues](https://github.com/exynos967/MaiBot-Telegram-Adapter/issues) 反馈！
 
-创建 Telegram Bot
+## 许可证
 
-首先，打开 Telegram，搜索 BotFather，点击 Start，然后发送 /newbot，按照提示输入你的机器人名字和用户名。
-
-创建成功后，BotFather 会给你一个 token，请妥善保存。
-
-如果需要在群聊中使用，需要关闭Bot的 Privacy mode，对 BotFather 发送 /setprivacy 命令，然后选择bot， 再选择 Disable。
-
-## 后续路线
-
-- 语音/表情/转发支持、reply 精准映射
-- 管理命令/消息回执回传（echo）
+本项目基于 MIT 许可证开源。
