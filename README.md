@@ -1,8 +1,8 @@
+<div align="center">
+
 ![:name](https://count.getloli.com/@:MaiBot-Telegram-Adapter?name=%3AMaiBot-Telegram-Adapter&theme=miku&padding=7&offset=0&align=top&scale=1&pixelated=1&darkmode=auto)
 
 # MaiBot-Telegram-Adapter
-
-<div align="center">
 
 **MaiBot 的 Telegram 平台适配器**
 
