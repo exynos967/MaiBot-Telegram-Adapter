@@ -9,7 +9,7 @@
 将 Telegram Bot 与 [MaiBot](https://github.com/Mai-with-u/MaiBot) AI 聊天核心无缝桥接
 
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-AGPL--v3-green.svg)](LICENSE)
 [![maim_message](https://img.shields.io/badge/protocol-maim__message-orange)](https://github.com/Mai-with-u/maim_message)
 
 </div>
