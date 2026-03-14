@@ -258,4 +258,4 @@ MaiBot-Telegram-Adapter/
 
 ## 许可证
 
-本项目基于 MIT 许可证开源。
+本项目基于 AGPLv3 许可证开源。
