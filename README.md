@@ -145,7 +145,6 @@ port = 8000
 
 ```bash
 docker compose up -d --build
-docker compose logs -f maibot-telegram-adapter
 ```
 
 默认行为：
@@ -153,32 +152,6 @@ docker compose logs -f maibot-telegram-adapter
 - `MAIBOT_TELEGRAM_CONFIG=/app/data/config.toml`
 - `./logs` 映射到容器内 `/app/logs`
 - 代理环境变量 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` / `NO_PROXY` 会透传到容器
-
-## CI 自动构建
-
-仓库已提供 `.github/workflows/docker-build.yml`：
-
-- 每次 `push`
-- 每次 `pull_request`
-- 手动触发 `workflow_dispatch`
-
-都会自动执行：
-
-1. `docker compose config` 校验 compose 文件
-2. 构建 Docker 镜像
-3. 在非 `pull_request` 场景自动推送到 GHCR
-
-默认推送地址：
-
-```text
-ghcr.io/exynos967/maibot-telegram-adapter
-```
-
-默认标签策略：
-
-- 分支推送：分支名
-- 所有构建：`sha-<commit>`
-- 默认分支：额外追加 `latest`
 
 ## 创建 Telegram Bot
 
