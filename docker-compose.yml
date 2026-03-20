@@ -1,9 +1,6 @@
 services:
   maibot-telegram-adapter:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: maibot-telegram-adapter:latest
+    image: ghcr.io/exynos967/maibot-telegram-adapter:latest
     restart: on-failure
     environment:
       TZ: ${TZ:-Asia/Shanghai}
@@ -15,4 +12,3 @@ services:
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
-

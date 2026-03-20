@@ -114,7 +114,12 @@ python main.py
 
 ## Docker Compose 部署
 
-仓库根目录已提供 `Dockerfile` 与 `docker-compose.yml`，默认将配置和日志分别持久化到宿主机的 `./data`、`./logs` 目录。
+仓库根目录已提供：
+
+- `docker-compose.yml`：默认直接拉取 GHCR 镜像部署
+- `docker-compose.build.yml`：本地 `Dockerfile` 构建覆盖文件
+
+默认会将配置和日志分别持久化到宿主机的 `./data`、`./logs` 目录。
 
 ### 1. 首次生成配置
 
@@ -143,8 +148,23 @@ port = 8000
 
 ### 3. 启动容器
 
+#### 方案 A：直接拉取 GHCR 镜像（推荐生产环境）
+
 ```bash
+docker compose pull
 docker compose up -d
+```
+
+默认拉取镜像：
+
+```text
+ghcr.io/exynos967/maibot-telegram-adapter:latest
+```
+
+#### 方案 B：使用本地 Dockerfile 构建
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
 默认行为：
@@ -252,6 +272,7 @@ MaiBot-Telegram-Adapter/
 ├── .github/workflows/docker-build.yml  # GitHub Actions 自动构建
 ├── Dockerfile                        # Docker 镜像构建文件
 ├── docker-compose.yml                # Docker Compose 部署示例
+├── docker-compose.build.yml          # 本地 Dockerfile 构建覆盖文件
 ├── main.py                          # 程序入口：启动轮询与路由
 ├── requirements.txt                 # Python 依赖
 ├── pyproject.toml                   # 项目元数据与代码规范配置
