@@ -1,0 +1,18 @@
+services:
+  maibot-telegram-adapter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: maibot-telegram-adapter:latest
+    restart: on-failure
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      MAIBOT_TELEGRAM_CONFIG: /app/data/config.toml
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      ALL_PROXY: ${ALL_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+

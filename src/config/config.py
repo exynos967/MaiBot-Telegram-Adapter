@@ -1,6 +1,7 @@
 import os
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 import shutil
 
 import tomlkit
@@ -18,23 +19,30 @@ from .official_configs import (
 
 install(extra_lines=3)
 
-TEMPLATE_DIR = "template"
+TEMPLATE_DIR = Path("template")
+DEFAULT_CONFIG_PATH = Path("config.toml")
+CONFIG_PATH_ENV = "MAIBOT_TELEGRAM_CONFIG"
 
 
-def update_config():
-    template_path = f"{TEMPLATE_DIR}/template_config.toml"
-    old_config_path = "config.toml"
-    new_config_path = "config.toml"
+def resolve_config_path() -> Path:
+    return Path(os.getenv(CONFIG_PATH_ENV, str(DEFAULT_CONFIG_PATH))).expanduser()
 
-    if not os.path.exists(old_config_path):
+
+def update_config(config_path: Path) -> None:
+    template_path = TEMPLATE_DIR / "template_config.toml"
+    old_config_path = config_path
+    new_config_path = config_path
+
+    if not old_config_path.exists():
         print("[config] 配置文件不存在，从模板创建新配置")
+        old_config_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(template_path, old_config_path)
         print(f"[config] 已创建新配置文件，请填写后重新运行: {old_config_path}")
-        quit()
+        raise SystemExit(0)
 
-    with open(old_config_path, "r", encoding="utf-8") as f:
+    with old_config_path.open("r", encoding="utf-8") as f:
         old_config = tomlkit.load(f)
-    with open(template_path, "r", encoding="utf-8") as f:
+    with template_path.open("r", encoding="utf-8") as f:
         new_config = tomlkit.load(f)
 
     if old_config and "inner" in old_config and "inner" in new_config:
@@ -48,10 +56,10 @@ def update_config():
     else:
         print("[config] 已有配置文件未检测到版本号，可能是旧版本。将进行更新")
 
-    backup_dir = "config_backup"
-    os.makedirs(backup_dir, exist_ok=True)
+    backup_dir = old_config_path.parent / "config_backup"
+    backup_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    old_backup_path = os.path.join(backup_dir, f"config.toml.bak.{timestamp}")
+    old_backup_path = backup_dir / f"{old_config_path.name}.bak.{timestamp}"
     shutil.copy2(old_config_path, old_backup_path)
     print(f"[config] 已备份旧配置文件到: {old_backup_path}")
 
@@ -73,10 +81,10 @@ def update_config():
 
     print("[config] 开始合并新旧配置...")
     update_dict(new_config, old_config)
-    with open(new_config_path, "w", encoding="utf-8") as f:
+    with new_config_path.open("w", encoding="utf-8") as f:
         f.write(tomlkit.dumps(new_config))
     print("[config] 配置文件更新完成，建议检查新配置文件中的内容")
-    quit()
+    raise SystemExit(0)
 
 
 @dataclass
@@ -87,15 +95,16 @@ class Config(ConfigBase):
     debug: DebugConfig
 
 
-def load_config(config_path: str) -> Config:
-    with open(config_path, "r", encoding="utf-8") as f:
+def load_config(config_path: str | Path) -> Config:
+    with Path(config_path).open("r", encoding="utf-8") as f:
         config_data = tomlkit.load(f)
     return Config.from_dict(config_data)
 
 
 # 更新配置（首次运行触发生成）
-update_config()
+CONFIG_PATH = resolve_config_path()
+update_config(CONFIG_PATH)
 
 print("[config] 正在品鉴配置文件...")
-global_config = load_config(config_path="config.toml")
-print("[config] 加载配置完成！")
+global_config = load_config(config_path=CONFIG_PATH)
+print(f"[config] 加载配置完成！当前配置文件: {CONFIG_PATH}")

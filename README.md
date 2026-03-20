@@ -112,6 +112,74 @@ uv run python main.py
 python main.py
 ```
 
+## Docker Compose 部署
+
+仓库根目录已提供 `Dockerfile` 与 `docker-compose.yml`，默认将配置和日志分别持久化到宿主机的 `./data`、`./logs` 目录。
+
+### 1. 首次生成配置
+
+```bash
+mkdir -p data logs
+docker compose run --rm maibot-telegram-adapter
+```
+
+首次执行会在 `./data/config.toml` 生成配置模板，然后容器退出，属于正常行为。
+
+### 2. 编辑 Docker 配置文件
+
+编辑 `./data/config.toml`，至少填写：
+
+```toml
+[telegram_bot]
+token = "你的Bot Token"
+
+[maibot_server]
+host = "你的 MaiBot Core 地址"
+port = 8000
+```
+
+- 如果 **MaiBot Core 和适配器在同一个 docker compose 网络中**，`host` 请填写 MaiBot Core 的服务名
+- 如果 **MaiBot Core 在宿主机或其他机器上**，`host` 请填写容器可访问的实际 IP / 域名
+
+### 3. 启动容器
+
+```bash
+docker compose up -d --build
+docker compose logs -f maibot-telegram-adapter
+```
+
+默认行为：
+
+- `MAIBOT_TELEGRAM_CONFIG=/app/data/config.toml`
+- `./logs` 映射到容器内 `/app/logs`
+- 代理环境变量 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` / `NO_PROXY` 会透传到容器
+
+## CI 自动构建
+
+仓库已提供 `.github/workflows/docker-build.yml`：
+
+- 每次 `push`
+- 每次 `pull_request`
+- 手动触发 `workflow_dispatch`
+
+都会自动执行：
+
+1. `docker compose config` 校验 compose 文件
+2. 构建 Docker 镜像
+3. 在非 `pull_request` 场景自动推送到 GHCR
+
+默认推送地址：
+
+```text
+ghcr.io/exynos967/maibot-telegram-adapter
+```
+
+默认标签策略：
+
+- 分支推送：分支名
+- 所有构建：`sha-<commit>`
+- 默认分支：额外追加 `latest`
+
 ## 创建 Telegram Bot
 
 1. 在 Telegram 中搜索 [@BotFather](https://t.me/BotFather)，点击 **Start**
@@ -208,6 +276,9 @@ proxy_from_env = true   # 自动读取 HTTP_PROXY / HTTPS_PROXY / NO_PROXY
 
 ```
 MaiBot-Telegram-Adapter/
+├── .github/workflows/docker-build.yml  # GitHub Actions 自动构建
+├── Dockerfile                        # Docker 镜像构建文件
+├── docker-compose.yml                # Docker Compose 部署示例
 ├── main.py                          # 程序入口：启动轮询与路由
 ├── requirements.txt                 # Python 依赖
 ├── pyproject.toml                   # 项目元数据与代码规范配置
