@@ -144,7 +144,7 @@ port = 8000
 ### 3. 启动容器
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
 默认行为：
