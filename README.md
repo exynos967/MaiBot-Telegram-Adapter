@@ -114,10 +114,8 @@ python main.py
 
 ## Docker Compose 部署
 
-仓库根目录已提供：
-
-- `docker-compose.yml`：默认直接拉取 GHCR 镜像部署
-- `docker-compose.build.yml`：本地 `Dockerfile` 构建覆盖文件
+- `docker-compose.yml`：拉取镜像部署
+- `docker-compose.build.yml`：本地构建
 
 默认会将配置和日志分别持久化到宿主机的 `./data`、`./logs` 目录。
 
@@ -148,20 +146,14 @@ port = 8000
 
 ### 3. 启动容器
 
-#### 方案 A：直接拉取 GHCR 镜像（推荐生产环境）
+#### 方案 A：直接拉取镜像（推荐）
 
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-默认拉取镜像：
-
-```text
-ghcr.io/exynos967/maibot-telegram-adapter:latest
-```
-
-#### 方案 B：使用本地 Dockerfile 构建
+#### 方案 B：本地 Dockerfile 构建
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
