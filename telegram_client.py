@@ -1,11 +1,29 @@
-import json
-from typing import Any, Dict, List, Optional
+"""Telegram Bot API HTTP 客户端。"""
 
-import aiohttp
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
+
+import json
+
+try:
+    import aiohttp
+    from aiohttp import ClientSession, ClientTimeout
+
+    AIOHTTP_AVAILABLE = True
+except ImportError:
+    AIOHTTP_AVAILABLE = False
+
+try:
+    from aiohttp_socks import ProxyConnector  # type: ignore
+
+    SOCKS_AVAILABLE = True
+except ImportError:
+    SOCKS_AVAILABLE = False
 
 
 class TelegramClient:
+    """Telegram Bot API 异步客户端。"""
+
     def __init__(
         self,
         token: str,
@@ -22,19 +40,19 @@ class TelegramClient:
         self._proxy_is_socks = self._is_socks(self._proxy_url) if self._proxy_url else False
         self._trust_env: bool = bool(proxy_from_env)
 
+    @classmethod
+    def is_available(cls) -> bool:
+        return AIOHTTP_AVAILABLE
+
     async def ensure_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
-            timeout = aiohttp.ClientTimeout(total=60)
+            timeout = ClientTimeout(total=60)
             connector = None
-            if self._proxy_is_socks and self._proxy_url:
-                try:
-                    from aiohttp_socks import ProxyConnector  # type: ignore
-
-                    connector = ProxyConnector.from_url(self._proxy_url)
-                except Exception as e:
-                    # 不阻断初始化，后续请求会失败并提示
-                    print(f"[telegram_client] 警告：SOCKS 代理初始化失败: {e}")
-            self._session = aiohttp.ClientSession(timeout=timeout, connector=connector, trust_env=self._trust_env)
+            if self._proxy_is_socks and self._proxy_url and SOCKS_AVAILABLE:
+                connector = ProxyConnector.from_url(self._proxy_url)
+            self._session = aiohttp.ClientSession(
+                timeout=timeout, connector=connector, trust_env=self._trust_env
+            )
         return self._session
 
     async def close(self) -> None:
@@ -44,18 +62,32 @@ class TelegramClient:
     def _url(self, method: str) -> str:
         return f"{self.api_base}/bot{self.token}/{method}"
 
+    def _http_proxy(self) -> Optional[str]:
+        if self._proxy_url and not self._proxy_is_socks:
+            return self._proxy_url
+        return None
+
     @staticmethod
-    def _append_reply_to_payload(payload: Dict[str, Any], reply_to: Optional[int]) -> None:
+    def _is_socks(proxy_url: Optional[str]) -> bool:
+        if not proxy_url:
+            return False
+        try:
+            return urlparse(proxy_url).scheme.lower().startswith("socks")
+        except Exception:
+            return False
+
+    @staticmethod
+    def _append_reply(payload: Dict[str, Any], reply_to: Optional[int]) -> None:
         if reply_to is not None:
             payload["reply_parameters"] = {"message_id": reply_to}
 
     @staticmethod
-    def _append_reply_to_form(form: aiohttp.FormData, reply_to: Optional[int]) -> None:
+    def _append_reply_form(form: aiohttp.FormData, reply_to: Optional[int]) -> None:
         if reply_to is not None:
             form.add_field("reply_parameters", json.dumps({"message_id": reply_to}))
 
     @staticmethod
-    def _append_topic_to_payload(
+    def _append_topic(
         payload: Dict[str, Any],
         message_thread_id: Optional[int],
         direct_messages_topic_id: Optional[int],
@@ -66,7 +98,7 @@ class TelegramClient:
             payload["direct_messages_topic_id"] = direct_messages_topic_id
 
     @staticmethod
-    def _append_topic_to_form(
+    def _append_topic_form(
         form: aiohttp.FormData,
         message_thread_id: Optional[int],
         direct_messages_topic_id: Optional[int],
@@ -110,7 +142,6 @@ class TelegramClient:
 
     async def download_file_bytes(self, file_path: str) -> bytes:
         session = await self.ensure_session()
-        # GET https://api.telegram.org/file/bot<token>/<file_path>
         file_url = f"{self.api_base}/file/bot{self.token}/{file_path}"
         async with session.get(file_url, proxy=self._http_proxy()) as resp:
             resp.raise_for_status()
@@ -126,14 +157,12 @@ class TelegramClient:
     ) -> Dict[str, Any]:
         session = await self.ensure_session()
         payload: Dict[str, Any] = {"chat_id": chat_id, "text": text}
-        self._append_reply_to_payload(payload, reply_to)
-        self._append_topic_to_payload(payload, message_thread_id, direct_messages_topic_id)
-        async with session.post(
-            self._url("sendMessage"), json=payload, proxy=self._http_proxy()
-        ) as resp:
+        self._append_reply(payload, reply_to)
+        self._append_topic(payload, message_thread_id, direct_messages_topic_id)
+        async with session.post(self._url("sendMessage"), json=payload, proxy=self._http_proxy()) as resp:
             return await resp.json()
 
-    async def send_photo_by_bytes(
+    async def send_photo_bytes(
         self,
         chat_id: int | str,
         photo_bytes: bytes,
@@ -147,15 +176,13 @@ class TelegramClient:
         form.add_field("chat_id", str(chat_id))
         if caption:
             form.add_field("caption", caption)
-        self._append_reply_to_form(form, reply_to)
-        self._append_topic_to_form(form, message_thread_id, direct_messages_topic_id)
+        self._append_reply_form(form, reply_to)
+        self._append_topic_form(form, message_thread_id, direct_messages_topic_id)
         form.add_field("photo", photo_bytes, filename="image.jpg", content_type="image/jpeg")
-        async with session.post(
-            self._url("sendPhoto"), data=form, proxy=self._http_proxy()
-        ) as resp:
+        async with session.post(self._url("sendPhoto"), data=form, proxy=self._http_proxy()) as resp:
             return await resp.json()
 
-    async def send_photo_by_url(
+    async def send_photo_url(
         self,
         chat_id: int | str,
         url: str,
@@ -168,14 +195,12 @@ class TelegramClient:
         payload: Dict[str, Any] = {"chat_id": chat_id, "photo": url}
         if caption:
             payload["caption"] = caption
-        self._append_reply_to_payload(payload, reply_to)
-        self._append_topic_to_payload(payload, message_thread_id, direct_messages_topic_id)
-        async with session.post(
-            self._url("sendPhoto"), json=payload, proxy=self._http_proxy()
-        ) as resp:
+        self._append_reply(payload, reply_to)
+        self._append_topic(payload, message_thread_id, direct_messages_topic_id)
+        async with session.post(self._url("sendPhoto"), json=payload, proxy=self._http_proxy()) as resp:
             return await resp.json()
 
-    async def send_voice_by_bytes(
+    async def send_voice_bytes(
         self,
         chat_id: int | str,
         voice_bytes: bytes,
@@ -189,55 +214,13 @@ class TelegramClient:
         form.add_field("chat_id", str(chat_id))
         if caption:
             form.add_field("caption", caption)
-        self._append_reply_to_form(form, reply_to)
-        self._append_topic_to_form(form, message_thread_id, direct_messages_topic_id)
+        self._append_reply_form(form, reply_to)
+        self._append_topic_form(form, message_thread_id, direct_messages_topic_id)
         form.add_field("voice", voice_bytes, filename="voice.ogg", content_type="audio/ogg")
-        async with session.post(
-            self._url("sendVoice"), data=form, proxy=self._http_proxy()
-        ) as resp:
+        async with session.post(self._url("sendVoice"), data=form, proxy=self._http_proxy()) as resp:
             return await resp.json()
 
-    async def send_video_by_url(
-        self,
-        chat_id: int | str,
-        url: str,
-        caption: Optional[str] = None,
-        reply_to: Optional[int] = None,
-        message_thread_id: Optional[int] = None,
-        direct_messages_topic_id: Optional[int] = None,
-    ) -> Dict[str, Any]:
-        session = await self.ensure_session()
-        payload: Dict[str, Any] = {"chat_id": chat_id, "video": url}
-        if caption:
-            payload["caption"] = caption
-        self._append_reply_to_payload(payload, reply_to)
-        self._append_topic_to_payload(payload, message_thread_id, direct_messages_topic_id)
-        async with session.post(
-            self._url("sendVideo"), json=payload, proxy=self._http_proxy()
-        ) as resp:
-            return await resp.json()
-
-    async def send_document_by_url(
-        self,
-        chat_id: int | str,
-        url: str,
-        caption: Optional[str] = None,
-        reply_to: Optional[int] = None,
-        message_thread_id: Optional[int] = None,
-        direct_messages_topic_id: Optional[int] = None,
-    ) -> Dict[str, Any]:
-        session = await self.ensure_session()
-        payload: Dict[str, Any] = {"chat_id": chat_id, "document": url}
-        if caption:
-            payload["caption"] = caption
-        self._append_reply_to_payload(payload, reply_to)
-        self._append_topic_to_payload(payload, message_thread_id, direct_messages_topic_id)
-        async with session.post(
-            self._url("sendDocument"), json=payload, proxy=self._http_proxy()
-        ) as resp:
-            return await resp.json()
-
-    async def send_animation_by_bytes(
+    async def send_animation_bytes(
         self,
         chat_id: int | str,
         anim_bytes: bytes,
@@ -251,25 +234,44 @@ class TelegramClient:
         form.add_field("chat_id", str(chat_id))
         if caption:
             form.add_field("caption", caption)
-        self._append_reply_to_form(form, reply_to)
-        self._append_topic_to_form(form, message_thread_id, direct_messages_topic_id)
+        self._append_reply_form(form, reply_to)
+        self._append_topic_form(form, message_thread_id, direct_messages_topic_id)
         form.add_field("animation", anim_bytes, filename="animation.gif", content_type="image/gif")
-        async with session.post(
-            self._url("sendAnimation"), data=form, proxy=self._http_proxy()
-        ) as resp:
+        async with session.post(self._url("sendAnimation"), data=form, proxy=self._http_proxy()) as resp:
             return await resp.json()
 
-    def _is_socks(self, proxy_url: Optional[str]) -> bool:
-        if not proxy_url:
-            return False
-        try:
-            scheme = urlparse(proxy_url).scheme.lower()
-            return scheme.startswith("socks")
-        except Exception:
-            return False
+    async def send_video_url(
+        self,
+        chat_id: int | str,
+        url: str,
+        caption: Optional[str] = None,
+        reply_to: Optional[int] = None,
+        message_thread_id: Optional[int] = None,
+        direct_messages_topic_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        session = await self.ensure_session()
+        payload: Dict[str, Any] = {"chat_id": chat_id, "video": url}
+        if caption:
+            payload["caption"] = caption
+        self._append_reply(payload, reply_to)
+        self._append_topic(payload, message_thread_id, direct_messages_topic_id)
+        async with session.post(self._url("sendVideo"), json=payload, proxy=self._http_proxy()) as resp:
+            return await resp.json()
 
-    def _http_proxy(self) -> Optional[str]:
-        # aiohttp 支持 per-request `proxy` 仅用于 HTTP(S) 代理；Socks 由 connector 处理
-        if self._proxy_url and not self._proxy_is_socks:
-            return self._proxy_url
-        return None
+    async def send_document_url(
+        self,
+        chat_id: int | str,
+        url: str,
+        caption: Optional[str] = None,
+        reply_to: Optional[int] = None,
+        message_thread_id: Optional[int] = None,
+        direct_messages_topic_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        session = await self.ensure_session()
+        payload: Dict[str, Any] = {"chat_id": chat_id, "document": url}
+        if caption:
+            payload["caption"] = caption
+        self._append_reply(payload, reply_to)
+        self._append_topic(payload, message_thread_id, direct_messages_topic_id)
+        async with session.post(self._url("sendDocument"), json=payload, proxy=self._http_proxy()) as resp:
+            return await resp.json()

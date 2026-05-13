@@ -1,5 +1,8 @@
-import base64
+"""Telegram 适配器工具函数。"""
+
 from typing import Optional
+
+import base64
 
 _TOPIC_GROUP_SPLITTER = "::tg-topic::"
 
@@ -24,11 +27,7 @@ def build_topic_group_id(
     message_thread_id: Optional[int] = None,
     direct_messages_topic_id: Optional[int] = None,
 ) -> str:
-    """
-    生成用于 MaiBot 会话分流的虚拟 group_id。
-    - 无话题时保持原 chat_id，兼容历史会话
-    - 有话题时编码成: <chat_id>::tg-topic::mt=<id>&dm=<id>
-    """
+    """生成用于会话分流的虚拟 group_id。"""
     base_chat_id = str(chat_id)
     topic_parts = []
     if message_thread_id is not None:
@@ -41,10 +40,7 @@ def build_topic_group_id(
 
 
 def parse_topic_group_id(group_id: int | str) -> tuple[str, Optional[int], Optional[int]]:
-    """
-    解析虚拟 group_id，返回:
-    (raw_chat_id, message_thread_id, direct_messages_topic_id)
-    """
+    """解析虚拟 group_id，返回 (raw_chat_id, message_thread_id, direct_messages_topic_id)。"""
     raw_group_id = str(group_id)
     if _TOPIC_GROUP_SPLITTER not in raw_group_id:
         return raw_group_id, None, None
@@ -59,7 +55,7 @@ def parse_topic_group_id(group_id: int | str) -> tuple[str, Optional[int], Optio
         key, value = part.split("=", 1)
         try:
             parsed_value = int(value)
-        except Exception:
+        except (TypeError, ValueError):
             continue
         if key == "mt":
             message_thread_id = parsed_value
@@ -67,3 +63,15 @@ def parse_topic_group_id(group_id: int | str) -> tuple[str, Optional[int], Optio
             direct_messages_topic_id = parsed_value
 
     return base_chat_id, message_thread_id, direct_messages_topic_id
+
+
+def slice_by_utf16_units(text: str, offset: int, length: int) -> str:
+    """按 Telegram 的 UTF-16 code unit 偏移切片文本。"""
+    if offset < 0 or length <= 0:
+        return ""
+    raw = text.encode("utf-16-le")
+    start = offset * 2
+    end = (offset + length) * 2
+    if start >= len(raw):
+        return ""
+    return raw[start:end].decode("utf-16-le", errors="ignore")
