@@ -185,7 +185,17 @@ class TelegramInboundCodec:
 
         # @bot 识别
         if self._is_mentioning_self(msg):
-            segs.insert(0, {"type": "text", "data": f"@{self._bot_username or 'bot'} "})
+            bot_id = str(self._bot_id) if self._bot_id is not None else ""
+            segs.insert(
+                0,
+                {
+                    "type": "at",
+                    "data": {
+                        "target_user_id": bot_id,
+                        "target_user_nickname": self._bot_username,
+                    },
+                },
+            )
             additional["at_bot"] = True
             is_at = True
 
