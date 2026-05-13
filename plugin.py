@@ -21,7 +21,6 @@ from .config import TelegramPluginSettings
 from .constants import PLATFORM_NAME, TELEGRAM_GATEWAY_NAME
 from .filters import TelegramChatFilter
 from .telegram_client import TelegramClient
-from .utils import is_group_chat
 
 
 class TelegramAdapterPlugin(MaiBotPlugin):
@@ -37,6 +36,7 @@ class TelegramAdapterPlugin(MaiBotPlugin):
         self._chat_filter: Optional[TelegramChatFilter] = None
         self._poll_task: Optional[asyncio.Task[None]] = None
         self._stop_requested: bool = False
+        self._bot_account_id: str = ""
 
     async def on_load(self) -> None:
         """插件加载时根据配置决定是否启动轮询。"""
@@ -119,6 +119,7 @@ class TelegramAdapterPlugin(MaiBotPlugin):
                 bot_id = me["result"].get("id")
                 bot_username = me["result"].get("username")
                 if bot_id:
+                    self._bot_account_id = str(bot_id)
                     self._inbound_codec.set_self(bot_id, bot_username)
                     self.ctx.logger.info(f"Telegram Bot: id={bot_id}, username={bot_username}")
                     bot_identified = True
@@ -244,13 +245,35 @@ class TelegramAdapterPlugin(MaiBotPlugin):
 
         # 路由到 Host
         try:
+            external_message_id = self._build_external_message_id(msg)
             await self.ctx.gateway.route_message(
                 gateway_name=TELEGRAM_GATEWAY_NAME,
                 message=message_dict,
-                external_message_id=str(msg.get("message_id", "")),
+                route_metadata=self._build_route_metadata(),
+                external_message_id=external_message_id,
+                dedupe_key=external_message_id,
             )
         except Exception as e:
             self.ctx.logger.error(f"Telegram 消息路由到 Host 失败: {e}")
+
+    def _build_route_metadata(self) -> Dict[str, Any]:
+        """构造注入 Host 时使用的路由辅助信息。"""
+        if not self._bot_account_id:
+            return {}
+        return {
+            "self_id": self._bot_account_id,
+            "platform_io_account_id": self._bot_account_id,
+        }
+
+    @staticmethod
+    def _build_external_message_id(msg: Dict[str, Any]) -> str:
+        """构造跨 Telegram chat 稳定唯一的平台消息 ID。"""
+        chat = msg.get("chat", {})
+        chat_id = chat.get("id")
+        message_id = msg.get("message_id")
+        if chat_id is not None and message_id is not None:
+            return f"{chat_id}:{message_id}"
+        return str(message_id or "")
 
 
 def create_plugin() -> TelegramAdapterPlugin:
