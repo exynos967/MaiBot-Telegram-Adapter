@@ -52,6 +52,17 @@ ban_user_id = []              # 全局屏蔽用户
 
 配置也可通过 MaiBot WebUI 的插件配置页面进行热重载修改。
 
+### MaiBot 主配置
+
+MaiBot Core 仍会用主配置里的 bot 平台账号识别“机器人自己”。启用 Telegram 后，请在 MaiBot 主配置的 `[bot]` 中加入 Telegram Bot 的数字 ID：
+
+```toml
+[bot]
+platforms = ["telegram:123456789"]
+```
+
+也可以使用 `tg:123456789`。Bot 数字 ID 会在插件启动成功后通过日志 `Telegram Bot: id=...` 输出。若缺少该配置，MaiBot 的历史消息/提示词中可能无法把 bot 自身识别为配置的昵称。
+
 ## 功能
 
 ### 消息类型支持

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, ClassVar, Dict, List, Literal
+from typing import Any, ClassVar, List, Literal
 
 from maibot_sdk import Field, PluginConfigBase
 from pydantic import field_validator

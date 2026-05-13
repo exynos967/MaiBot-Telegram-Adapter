@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 try:
     import aiohttp
-    from aiohttp import ClientSession, ClientTimeout
+    from aiohttp import ClientTimeout
 
     AIOHTTP_AVAILABLE = True
 except ImportError:
