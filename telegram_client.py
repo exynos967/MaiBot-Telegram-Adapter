@@ -82,14 +82,18 @@ class TelegramClient:
             return False
 
     @staticmethod
-    def _append_reply(payload: Dict[str, Any], reply_to: Optional[int]) -> None:
-        if reply_to is not None:
-            payload["reply_parameters"] = {"message_id": reply_to}
+    def _build_reply_parameters(reply_to: int) -> Dict[str, Any]:
+        return {"message_id": reply_to, "allow_sending_without_reply": True}
 
-    @staticmethod
-    def _append_reply_form(form: aiohttp.FormData, reply_to: Optional[int]) -> None:
+    @classmethod
+    def _append_reply(cls, payload: Dict[str, Any], reply_to: Optional[int]) -> None:
         if reply_to is not None:
-            form.add_field("reply_parameters", json.dumps({"message_id": reply_to}))
+            payload["reply_parameters"] = cls._build_reply_parameters(reply_to)
+
+    @classmethod
+    def _append_reply_form(cls, form: aiohttp.FormData, reply_to: Optional[int]) -> None:
+        if reply_to is not None:
+            form.add_field("reply_parameters", json.dumps(cls._build_reply_parameters(reply_to)))
 
     @staticmethod
     def _append_topic(

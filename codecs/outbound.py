@@ -70,18 +70,23 @@ class TelegramOutboundCodec:
             return {"success": False, "error": "消息段为空"}
 
         last_result: Dict[str, Any] = {}
-        replied = False
+        errors: List[str] = []
+        sent_any = False
         for seg in payloads:
-            current_reply = None if replied else reply_to
+            if self._is_local_only_segment(seg):
+                continue
+            current_reply = None if sent_any else reply_to
             result = await self._send_segment(
                 chat_id, seg, current_reply, message_thread_id, direct_messages_topic_id
             )
             if result.get("ok"):
-                replied = True
+                sent_any = True
                 last_result = result
+            else:
+                errors.append(self._format_send_error(seg, result))
 
-        if not replied:
-            return {"success": False, "error": "所有消息段发送失败"}
+        if not sent_any:
+            return {"success": False, "error": "; ".join(errors) or "所有消息段发送失败"}
 
         # 提取外部消息 ID
         external_id = ""
@@ -90,6 +95,22 @@ class TelegramOutboundCodec:
             external_id = str(result_data.get("message_id", ""))
 
         return {"success": True, "external_message_id": external_id or None}
+
+    @staticmethod
+    def _is_local_only_segment(seg: Dict[str, Any]) -> bool:
+        seg_type = str(seg.get("type") or "").strip()
+        return seg_type in {"reply", "at", "forward", "dict"}
+
+    @staticmethod
+    def _format_send_error(seg: Dict[str, Any], result: Dict[str, Any]) -> str:
+        seg_type = str(seg.get("type") or "unknown").strip() or "unknown"
+        description = str(
+            result.get("description")
+            or result.get("error")
+            or result.get("error_code")
+            or "发送失败"
+        ).strip()
+        return f"{seg_type}: {description}"
 
     async def _send_segment(
         self,
@@ -146,9 +167,9 @@ class TelegramOutboundCodec:
                         direct_messages_topic_id=direct_messages_topic_id,
                     )
                 return {"ok": False}
-            elif seg_type in ("reply", "at", "forward", "dict"):
-                # 这些类型不需要发送到 Telegram
-                return {"ok": False}
+            elif self._is_local_only_segment(seg):
+                # 这些类型只参与本地语义，不直接发送到 Telegram
+                return {"ok": True}
             else:
                 if seg_type:
                     self._logger.debug(f"跳过不支持的发送类型: {seg_type}")
