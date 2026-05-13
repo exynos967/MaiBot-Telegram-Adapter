@@ -1,9 +1,14 @@
 """Telegram Bot API HTTP 客户端。"""
 
-from typing import Any, Dict, List, Optional
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 import json
+
+if TYPE_CHECKING:
+    import aiohttp
 
 try:
     import aiohttp

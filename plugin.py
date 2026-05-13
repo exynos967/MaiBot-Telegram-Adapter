@@ -112,6 +112,7 @@ class TelegramAdapterPlugin(MaiBotPlugin):
         self._chat_filter = TelegramChatFilter(self.ctx.logger)
 
         # 获取 bot 身份
+        bot_identified = False
         try:
             me = await self._tg_client.get_me()
             if me.get("ok") and me.get("result"):
@@ -120,6 +121,7 @@ class TelegramAdapterPlugin(MaiBotPlugin):
                 if bot_id:
                     self._inbound_codec.set_self(bot_id, bot_username)
                     self.ctx.logger.info(f"Telegram Bot: id={bot_id}, username={bot_username}")
+                    bot_identified = True
 
                     # 上报网关就绪状态
                     await self.ctx.gateway.update_state(
@@ -129,9 +131,15 @@ class TelegramAdapterPlugin(MaiBotPlugin):
                         account_id=str(bot_id),
                     )
             else:
-                self.ctx.logger.warning(f"Telegram getMe 失败: {me}")
+                self.ctx.logger.error(f"Telegram getMe 失败: {me}")
         except Exception as e:
-            self.ctx.logger.warning(f"获取 Telegram Bot 信息失败: {e}")
+            self.ctx.logger.error(f"获取 Telegram Bot 信息失败: {e}")
+
+        if not bot_identified:
+            self.ctx.logger.error("无法获取 Bot 身份，Telegram 适配器不会启动轮询")
+            await self._tg_client.close()
+            self._tg_client = None
+            return
 
         # 启动轮询
         self._stop_requested = False
