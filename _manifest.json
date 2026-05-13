@@ -1,13 +1,13 @@
 {
   "manifest_version": 2,
-  "version": "0.1.0",
-  "name": "telegram_adapter",
-  "description": "Telegram Bot API adapter plugin for MaiBot. Provides duplex message gateway via long-polling.",
+  "version": "1.0.0",
+  "name": "Telegram_Adapter",
+  "description": "Telegram Bot API adapter plugin for MaiBot",
   "author": {
-    "name": "MaiBot Community",
+    "name": "薄暝",
     "url": "https://github.com/exynos967/MaiBot-Telegram-Adapter"
   },
-  "license": "GPL-v3.0-or-later",
+  "license": "AGPL-v3.0-or-later",
   "urls": {
     "repository": "https://github.com/exynos967/MaiBot-Telegram-Adapter",
     "homepage": "https://github.com/exynos967/MaiBot-Telegram-Adapter",
@@ -30,5 +30,5 @@
       "en-US"
     ]
   },
-  "id": "community.telegram-adapter"
+  "id": "exynos.telegram-adapter"
 }
