@@ -36,9 +36,18 @@ class TelegramOutboundCodec:
         parsed_thread_id: Optional[int] = None
         parsed_dm_topic_id: Optional[int] = None
 
-        if group_info and group_info.get("group_id"):
+        target_group_id = self._clean_optional_str(additional_config.get("platform_io_target_group_id"))
+        target_user_id = self._clean_optional_str(additional_config.get("platform_io_target_user_id"))
+
+        if target_group_id:
+            chat_id, parsed_thread_id, parsed_dm_topic_id = parse_topic_group_id(target_group_id)
+        elif group_info and group_info.get("group_id"):
             chat_id, parsed_thread_id, parsed_dm_topic_id = parse_topic_group_id(group_info["group_id"])
+        elif target_user_id:
+            chat_id = target_user_id
         elif user_info and user_info.get("user_id"):
+            # 兼容直接调用网关发送的最小 MessageDict。Host 正常出站时
+            # user_info 是机器人自身，目标用户应由 platform_io_target_user_id 提供。
             chat_id = user_info["user_id"]
 
         if not chat_id:
@@ -173,3 +182,10 @@ class TelegramOutboundCodec:
             return int(value)
         except (TypeError, ValueError):
             return None
+
+    @staticmethod
+    def _clean_optional_str(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = str(value).strip()
+        return cleaned or None

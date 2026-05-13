@@ -67,6 +67,7 @@ class TelegramInboundCodec:
         # 群聊信息
         if is_group_chat(chat_type):
             virtual_group_id = build_topic_group_id(chat_id, message_thread_id, direct_messages_topic_id)
+            additional_config["platform_io_target_group_id"] = virtual_group_id
             message_info["group_info"] = {
                 "group_id": virtual_group_id,
                 "group_name": chat.get("title") or f"group_{chat_id}",
