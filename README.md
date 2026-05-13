@@ -1,9 +1,17 @@
+<div align="center">
+
+![:name](https://count.getloli.com/@:MaiBot-Telegram-Adapter?name=%3AMaiBot-Telegram-Adapter&theme=miku&padding=7&offset=0&align=top&scale=1&pixelated=1&darkmode=auto)
+
 # MaiBot-Telegram-Adapter
 
 **MaiBot 的 Telegram 平台适配器插件**
 
-将 Telegram Bot 与 [MaiBot](https://github.com/MaiM-with-u/MaiBot) 无缝桥接，作为 maibot_sdk 2.x 插件运行。
+将 Telegram Bot 与 [MaiBot](https://github.com/Mai-with-u/MaiBot) 无缝桥接
 
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-AGPL--v3-green.svg)](LICENSE)
+
+</div>
 ## 安装
 
 将本仓库 clone 到 MaiBot 的 `plugins/` 目录下：
