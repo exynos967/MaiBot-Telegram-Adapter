@@ -256,7 +256,7 @@ class TelegramInboundCodec:
                     token = slice_by_utf16_units(base_text, offset, length)
                     if uname_lower and token.lower() == f"@{uname_lower}":
                         return True
-                except Exception:
+                except (TypeError, ValueError):
                     continue
             elif etype == "bot_command":
                 try:
@@ -265,7 +265,7 @@ class TelegramInboundCodec:
                     token = slice_by_utf16_units(base_text, offset, length)
                     if uname_lower and f"@{uname_lower}" in token.lower():
                         return True
-                except Exception:
+                except (TypeError, ValueError):
                     continue
             elif etype == "text_mention":
                 user = ent.get("user") or {}
