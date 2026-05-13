@@ -10,7 +10,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-AGPL--v3-green.svg)](LICENSE)
-[![maibot-plugin-sdk](https://img.shields.io/badge/protocol-maibot--plugin--sdk-orange)](https://github.com/Mai-with-u/maibot-plugin-sdk)
+[![maibot-plugin-sdk](https://img.shields.io/badge/SDK-maibot--plugin--sdk-orange)](https://github.com/Mai-with-u/maibot-plugin-sdk)
 
 </div>
 ## 安装
