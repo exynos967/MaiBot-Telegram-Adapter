@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
+import hashlib
 import re
 import time
 
 from ..constants import PLATFORM_NAME
 from ..telegram_client import TelegramClient
-from ..utils import build_topic_group_id, is_group_chat, pick_username, slice_by_utf16_units, to_base64
+from ..utils import build_topic_group_id, is_group_chat, pick_username, slice_by_utf16_units
 
 
 class TelegramInboundCodec:
@@ -143,9 +144,9 @@ class TelegramInboundCodec:
             largest = max(photos, key=lambda p: p.get("file_size", 0))
             file_id = largest.get("file_id")
             if file_id:
-                b64 = await self._download_as_base64(file_id)
-                if b64:
-                    segs.append({"type": "image", "data": b64})
+                raw_bytes = await self._download_file_bytes(file_id)
+                if raw_bytes:
+                    segs.append(self._build_binary_segment("image", raw_bytes))
                 else:
                     segs.append({"type": "text", "data": "[图片]"})
 
@@ -153,9 +154,9 @@ class TelegramInboundCodec:
         sticker = msg.get("sticker")
         if sticker:
             if not (sticker.get("is_animated") or sticker.get("is_video")):
-                b64 = await self._download_as_base64(sticker.get("file_id"))
-                if b64:
-                    segs.append({"type": "emoji", "data": b64})
+                raw_bytes = await self._download_file_bytes(sticker.get("file_id"))
+                if raw_bytes:
+                    segs.append(self._build_binary_segment("emoji", raw_bytes))
                 else:
                     segs.append({"type": "text", "data": "[贴纸]"})
             else:
@@ -164,16 +165,16 @@ class TelegramInboundCodec:
         # 动图
         animation = msg.get("animation")
         if animation:
-            b64 = await self._download_as_base64(animation.get("file_id"))
-            if b64:
-                segs.append({"type": "emoji", "data": b64})
+            raw_bytes = await self._download_file_bytes(animation.get("file_id"))
+            if raw_bytes:
+                segs.append(self._build_binary_segment("emoji", raw_bytes))
 
         # 语音
         voice = msg.get("voice")
         if voice:
-            b64 = await self._download_as_base64(voice.get("file_id"))
-            if b64:
-                segs.append({"type": "voice", "data": b64})
+            raw_bytes = await self._download_file_bytes(voice.get("file_id"))
+            if raw_bytes:
+                segs.append(self._build_binary_segment("voice", raw_bytes))
 
         # 文档
         document = msg.get("document")
@@ -189,18 +190,28 @@ class TelegramInboundCodec:
 
         return segs or None, additional, is_at
 
-    async def _download_as_base64(self, file_id: Optional[str]) -> Optional[str]:
-        """下载文件并转为 base64。"""
+    async def _download_file_bytes(self, file_id: Optional[str]) -> Optional[bytes]:
+        """下载文件并返回原始字节。"""
         if not file_id:
             return None
         try:
             file_path = await self._tg.get_file_path(file_id)
             if file_path:
-                data = await self._tg.download_file_bytes(file_path)
-                return to_base64(data)
+                return await self._tg.download_file_bytes(file_path)
         except Exception as e:
             self._logger.warning(f"Telegram 文件下载失败: {e}")
         return None
+
+    @staticmethod
+    def _build_binary_segment(seg_type: str, raw_bytes: bytes) -> Dict[str, Any]:
+        """构造符合 Host 规范的二进制组件段。"""
+        import base64
+        return {
+            "type": seg_type,
+            "data": "",
+            "hash": hashlib.sha256(raw_bytes).hexdigest(),
+            "binary_data_base64": base64.b64encode(raw_bytes).decode("utf-8"),
+        }
 
     def _is_mentioning_self(self, msg: Dict[str, Any]) -> bool:
         """判断消息是否 @bot 或回复 bot。"""
