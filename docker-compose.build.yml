@@ -1,6 +1,0 @@
-services:
-  maibot-telegram-adapter:
-    build:
-      context: .
-      dockerfile: Dockerfile
-

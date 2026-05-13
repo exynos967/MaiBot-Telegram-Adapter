@@ -1,6 +1,0 @@
-aiohttp>=3.9.0
-loguru>=0.7.2
-maim_message>=0.1.0
-tomlkit>=0.12.3
-rich>=13.7.1
-aiohttp-socks>=0.8.4
