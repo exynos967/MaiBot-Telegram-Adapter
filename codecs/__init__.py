@@ -48,24 +48,17 @@ class TelegramInboundCodec:
         )
 
         # 构建消息段
-        segments, additional_config = await self._extract_segments(msg)
+        segments, additional_config, is_at = await self._extract_segments(msg)
         if not segments:
             return None
 
         # 构建 message_info
         message_info: Dict[str, Any] = {
-            "platform": PLATFORM_NAME,
-            "message_id": str(msg.get("message_id", "")),
-            "time": time.time(),
             "user_info": {
                 "platform": PLATFORM_NAME,
                 "user_id": sender_user_id,
                 "user_nickname": user_nickname,
                 "user_cardname": None,
-            },
-            "format_info": {
-                "content_format": ["text", "image", "emoji"],
-                "accept_format": ["text", "image", "emoji", "reply", "voice", "imageurl"],
             },
             "additional_config": additional_config,
         }
@@ -74,7 +67,6 @@ class TelegramInboundCodec:
         if is_group_chat(chat_type):
             virtual_group_id = build_topic_group_id(chat_id, message_thread_id, direct_messages_topic_id)
             message_info["group_info"] = {
-                "platform": PLATFORM_NAME,
                 "group_id": virtual_group_id,
                 "group_name": chat.get("title") or f"group_{chat_id}",
             }
@@ -82,27 +74,41 @@ class TelegramInboundCodec:
             # 私聊：设置 platform_io_target_user_id
             additional_config["platform_io_target_user_id"] = sender_user_id
 
-        # 构建 message_segment
-        message_segment: Dict[str, Any] = {
-            "type": "seglist",
-            "data": segments,
-        }
-
         # 构建完整的 plain_text
         plain_text = "".join(
             seg.get("data", "") for seg in segments if seg.get("type") == "text"
         )
 
+        # 判断是否包含图片/emoji
+        has_image = any(seg.get("type") == "image" for seg in segments)
+        has_emoji = any(seg.get("type") == "emoji" for seg in segments)
+
+        message_id = str(msg.get("message_id") or f"tg-{int(time.time() * 1000)}")
+
         return {
+            "message_id": message_id,
+            "timestamp": str(time.time()),
+            "platform": PLATFORM_NAME,
             "message_info": message_info,
-            "message_segment": message_segment,
-            "raw_message": plain_text,
+            "raw_message": segments,
+            "is_mentioned": is_at,
+            "is_at": is_at,
+            "is_emoji": has_emoji,
+            "is_picture": has_image,
+            "is_command": plain_text.startswith("/"),
+            "is_notify": False,
+            "processed_plain_text": plain_text,
         }
 
-    async def _extract_segments(self, msg: Dict[str, Any]) -> Tuple[Optional[List[Dict[str, Any]]], Dict[str, Any]]:
-        """从 Telegram 消息中提取消息段列表。"""
+    async def _extract_segments(self, msg: Dict[str, Any]) -> Tuple[Optional[List[Dict[str, Any]]], Dict[str, Any], bool]:
+        """从 Telegram 消息中提取消息段列表。
+
+        Returns:
+            (segments, additional_config, is_at)
+        """
         segs: List[Dict[str, Any]] = []
         additional: Dict[str, Any] = {}
+        is_at = False
 
         # 保留 topic 信息
         if msg.get("message_thread_id") is not None:
@@ -177,10 +183,11 @@ class TelegramInboundCodec:
 
         # @bot 识别
         if self._is_mentioning_self(msg):
-            segs.insert(0, {"type": "mention_bot", "data": "1"})
+            segs.insert(0, {"type": "text", "data": f"@{self._bot_username or 'bot'} "})
             additional["at_bot"] = True
+            is_at = True
 
-        return segs or None, additional
+        return segs or None, additional, is_at
 
     async def _download_as_base64(self, file_id: Optional[str]) -> Optional[str]:
         """下载文件并转为 base64。"""
@@ -237,7 +244,7 @@ class TelegramInboundCodec:
                     token = slice_by_utf16_units(base_text, offset, length)
                     if uname_lower and token.lower() == f"@{uname_lower}":
                         return True
-                except (TypeError, ValueError):
+                except Exception:
                     continue
             elif etype == "bot_command":
                 try:
@@ -246,7 +253,7 @@ class TelegramInboundCodec:
                     token = slice_by_utf16_units(base_text, offset, length)
                     if uname_lower and f"@{uname_lower}" in token.lower():
                         return True
-                except (TypeError, ValueError):
+                except Exception:
                     continue
             elif etype == "text_mention":
                 user = ent.get("user") or {}
