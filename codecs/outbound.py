@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import base64
 
@@ -26,7 +26,7 @@ class TelegramOutboundCodec:
             标准化发送结果 dict。
         """
         message_info = message.get("message_info", {})
-        message_segment = message.get("message_segment", {})
+        raw_message = message.get("raw_message", [])
         group_info = message_info.get("group_info")
         user_info = message_info.get("user_info")
         additional_config = message_info.get("additional_config", {})
@@ -45,7 +45,7 @@ class TelegramOutboundCodec:
             return {"success": False, "error": "无法确定目标 chat_id"}
 
         # 解析 reply_to
-        reply_to = self._extract_reply_to(message_segment, additional_config)
+        reply_to = self._extract_reply_to_from_additional(additional_config, raw_message)
 
         # 解析 topic
         message_thread_id = self._safe_int(additional_config.get("message_thread_id"))
@@ -55,8 +55,8 @@ class TelegramOutboundCodec:
         if direct_messages_topic_id is None:
             direct_messages_topic_id = parsed_dm_topic_id
 
-        # 扁平化消息段并逐个发送
-        payloads = self._flatten_segments(message_segment)
+        # raw_message 是组件列表，直接使用
+        payloads = raw_message if isinstance(raw_message, list) else []
         if not payloads:
             return {"success": False, "error": "消息段为空"}
 
@@ -91,91 +91,79 @@ class TelegramOutboundCodec:
         direct_messages_topic_id: Optional[int],
     ) -> Dict[str, Any]:
         """发送单个消息段。"""
-        seg_type = seg.get("type", "")
+        seg_type = str(seg.get("type") or "").strip()
         seg_data = seg.get("data", "")
+        # 二进制组件的实际 base64 数据在 binary_data_base64 字段
+        binary_b64 = seg.get("binary_data_base64", "")
 
         try:
             if seg_type == "text":
+                text = seg_data if isinstance(seg_data, str) else str(seg_data)
+                if not text.strip():
+                    return {"ok": False}
                 return await self._tg.send_message(
-                    chat_id, seg_data, reply_to, message_thread_id, direct_messages_topic_id
+                    chat_id, text, reply_to, message_thread_id, direct_messages_topic_id
                 )
             elif seg_type == "image":
-                image_bytes = base64.b64decode(seg_data)
-                return await self._tg.send_photo_bytes(
-                    chat_id, image_bytes, reply_to=reply_to,
-                    message_thread_id=message_thread_id,
-                    direct_messages_topic_id=direct_messages_topic_id,
-                )
-            elif seg_type == "imageurl":
-                return await self._tg.send_photo_url(
-                    chat_id, seg_data, reply_to=reply_to,
-                    message_thread_id=message_thread_id,
-                    direct_messages_topic_id=direct_messages_topic_id,
-                )
+                if binary_b64:
+                    image_bytes = base64.b64decode(binary_b64)
+                    return await self._tg.send_photo_bytes(
+                        chat_id, image_bytes, reply_to=reply_to,
+                        message_thread_id=message_thread_id,
+                        direct_messages_topic_id=direct_messages_topic_id,
+                    )
+                elif isinstance(seg_data, str) and seg_data.startswith("http"):
+                    return await self._tg.send_photo_url(
+                        chat_id, seg_data, reply_to=reply_to,
+                        message_thread_id=message_thread_id,
+                        direct_messages_topic_id=direct_messages_topic_id,
+                    )
+                return {"ok": False}
             elif seg_type == "voice":
-                voice_bytes = base64.b64decode(seg_data)
-                return await self._tg.send_voice_bytes(
-                    chat_id, voice_bytes, reply_to=reply_to,
-                    message_thread_id=message_thread_id,
-                    direct_messages_topic_id=direct_messages_topic_id,
-                )
-            elif seg_type == "videourl":
-                return await self._tg.send_video_url(
-                    chat_id, seg_data, reply_to=reply_to,
-                    message_thread_id=message_thread_id,
-                    direct_messages_topic_id=direct_messages_topic_id,
-                )
-            elif seg_type == "file":
-                return await self._tg.send_document_url(
-                    chat_id, seg_data, reply_to=reply_to,
-                    message_thread_id=message_thread_id,
-                    direct_messages_topic_id=direct_messages_topic_id,
-                )
+                if binary_b64:
+                    voice_bytes = base64.b64decode(binary_b64)
+                    return await self._tg.send_voice_bytes(
+                        chat_id, voice_bytes, reply_to=reply_to,
+                        message_thread_id=message_thread_id,
+                        direct_messages_topic_id=direct_messages_topic_id,
+                    )
+                return {"ok": False}
             elif seg_type == "emoji":
-                anim_bytes = base64.b64decode(seg_data)
-                return await self._tg.send_animation_bytes(
-                    chat_id, anim_bytes, reply_to=reply_to,
-                    message_thread_id=message_thread_id,
-                    direct_messages_topic_id=direct_messages_topic_id,
-                )
+                if binary_b64:
+                    anim_bytes = base64.b64decode(binary_b64)
+                    return await self._tg.send_animation_bytes(
+                        chat_id, anim_bytes, reply_to=reply_to,
+                        message_thread_id=message_thread_id,
+                        direct_messages_topic_id=direct_messages_topic_id,
+                    )
+                return {"ok": False}
+            elif seg_type in ("reply", "at", "forward", "dict"):
+                # 这些类型不需要发送到 Telegram
+                return {"ok": False}
             else:
-                self._logger.debug(f"跳过不支持的发送类型: {seg_type}")
+                if seg_type:
+                    self._logger.debug(f"跳过不支持的发送类型: {seg_type}")
                 return {"ok": False}
         except Exception as e:
             self._logger.warning(f"Telegram 发送 {seg_type} 失败: {e}")
             return {"ok": False, "description": str(e)}
 
-    def _flatten_segments(self, seg: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """递归扁平化 seglist。"""
-        items: List[Dict[str, Any]] = []
-        if seg.get("type") == "seglist":
-            for s in seg.get("data", []):
-                if isinstance(s, dict):
-                    items.extend(self._flatten_segments(s))
-            return items
-        items.append(seg)
-        return items
-
-    def _extract_reply_to(self, seg: Dict[str, Any], additional: Dict[str, Any]) -> Optional[int]:
+    def _extract_reply_to_from_additional(
+        self, additional: Dict[str, Any], raw_message: List[Dict[str, Any]]
+    ) -> Optional[int]:
         """提取回复目标消息 ID。"""
         reply_id = additional.get("reply_message_id")
         if reply_id:
             return self._safe_int(reply_id)
 
-        # 从 seg 中查找 reply 类型
-        def _walk(s: Dict[str, Any]) -> Optional[int]:
-            if s.get("type") == "seglist":
-                for child in s.get("data", []):
-                    if isinstance(child, dict):
-                        r = _walk(child)
-                        if r:
-                            return r
-                return None
-            if s.get("type") == "reply":
-                return self._safe_int(s.get("data"))
-            return None
-
-        return _walk(seg)
+        # 从 raw_message 中查找 reply 类型组件
+        for seg in raw_message:
+            if isinstance(seg, dict) and seg.get("type") == "reply":
+                data = seg.get("data")
+                if isinstance(data, dict):
+                    return self._safe_int(data.get("target_message_id"))
+                return self._safe_int(data)
+        return None
 
     @staticmethod
     def _safe_int(value: Any) -> Optional[int]:
