@@ -186,16 +186,8 @@ class TelegramInboundCodec:
         # @bot 识别
         if self._is_mentioning_self(msg):
             bot_id = str(self._bot_id) if self._bot_id is not None else ""
-            segs.insert(
-                0,
-                {
-                    "type": "at",
-                    "data": {
-                        "target_user_id": bot_id,
-                        "target_user_nickname": self._bot_username,
-                    },
-                },
-            )
+            segs = self._strip_leading_self_mention_text(segs)
+            segs.insert(0, {"type": "at", "data": {"target_user_id": bot_id}})
             additional["at_bot"] = True
             is_at = True
 
@@ -223,6 +215,22 @@ class TelegramInboundCodec:
             "hash": hashlib.sha256(raw_bytes).hexdigest(),
             "binary_data_base64": base64.b64encode(raw_bytes).decode("utf-8"),
         }
+
+    def _strip_leading_self_mention_text(self, segs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """移除文本开头重复的 @bot username，避免 Prompt 中出现两份 @。"""
+        if not segs or not self._bot_username:
+            return segs
+        first = segs[0]
+        if first.get("type") != "text" or not isinstance(first.get("data"), str):
+            return segs
+
+        pattern = re.compile(rf"^\s*@{re.escape(self._bot_username)}\b\s*", re.IGNORECASE)
+        stripped_text = pattern.sub("", first["data"], count=1)
+        if stripped_text == first["data"]:
+            return segs
+        if stripped_text:
+            return [{**first, "data": stripped_text}, *segs[1:]]
+        return segs[1:]
 
     def _is_mentioning_self(self, msg: Dict[str, Any]) -> bool:
         """判断消息是否 @bot 或回复 bot。"""
