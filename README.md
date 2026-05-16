@@ -14,7 +14,7 @@
 
 </div>
 
-## 安装
+### 安装
 
 将本仓库 clone 到 MaiBot 的 `plugins/` 目录下：
 
