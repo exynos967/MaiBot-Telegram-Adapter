@@ -13,7 +13,7 @@
 [![maibot-plugin-sdk](https://img.shields.io/badge/SDK-maibot--plugin--sdk-orange)](https://github.com/Mai-with-u/maibot-plugin-sdk)
 
 </div>
-## 安装
+### 安装
 
 将本仓库 clone 到 MaiBot 的 `plugins/` 目录下：
 
