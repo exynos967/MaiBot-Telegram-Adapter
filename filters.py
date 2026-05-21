@@ -22,21 +22,29 @@ class TelegramChatFilter:
         """检查消息是否通过聊天过滤。"""
         if is_group_chat(chat_type) and chat_id:
             if chat_config.group_list_type == "whitelist" and chat_id not in chat_config.group_list:
-                self._logger.debug("群聊不在白名单中，消息被丢弃")
+                self._logger.debug(
+                    f"群聊不在白名单中，消息被丢弃: chat_id={chat_id}, group_list={chat_config.group_list}"
+                )
                 return False
             if chat_config.group_list_type == "blacklist" and chat_id in chat_config.group_list:
-                self._logger.debug("群聊在黑名单中，消息被丢弃")
+                self._logger.debug(
+                    f"群聊在黑名单中，消息被丢弃: chat_id={chat_id}, group_list={chat_config.group_list}"
+                )
                 return False
         else:
             if chat_config.private_list_type == "whitelist" and user_id not in chat_config.private_list:
-                self._logger.debug("私聊不在白名单中，消息被丢弃")
+                self._logger.debug(
+                    f"私聊不在白名单中，消息被丢弃: user_id={user_id}, private_list={chat_config.private_list}"
+                )
                 return False
             if chat_config.private_list_type == "blacklist" and user_id in chat_config.private_list:
-                self._logger.debug("私聊在黑名单中，消息被丢弃")
+                self._logger.debug(
+                    f"私聊在黑名单中，消息被丢弃: user_id={user_id}, private_list={chat_config.private_list}"
+                )
                 return False
 
         if user_id in chat_config.ban_user_id:
-            self._logger.debug("用户在全局黑名单中，消息被丢弃")
+            self._logger.debug(f"用户在全局黑名单中，消息被丢弃: user_id={user_id}")
             return False
 
         return True

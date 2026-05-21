@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, ClassVar, List, Literal
+from typing import Any, ClassVar, Iterable, List, Literal
 
 from maibot_sdk import Field, PluginConfigBase
 from pydantic import field_validator
@@ -145,11 +145,18 @@ class TelegramChatConfig(PluginConfigBase):
     @field_validator("group_list", "private_list", "ban_user_id", mode="before")
     @classmethod
     def _normalize_id_lists(cls, value: Any) -> List[str]:
-        if not isinstance(value, list):
+        if value is None:
             return []
+        if isinstance(value, str):
+            raw_items: Iterable[Any] = value.replace("\n", ",").split(",")
+        elif isinstance(value, Iterable) and not isinstance(value, (bytes, bytearray, dict)):
+            raw_items = value
+        else:
+            raw_items = (value,)
+
         seen: set[str] = set()
         result: List[str] = []
-        for item in value:
+        for item in raw_items:
             s = str(item).strip()
             if s and s not in seen:
                 seen.add(s)
