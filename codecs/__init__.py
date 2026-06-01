@@ -39,6 +39,8 @@ class TelegramInboundCodec:
         user_id = from_user.get("id")
         message_thread_id = msg.get("message_thread_id")
         direct_messages_topic_id = msg.get("direct_messages_topic_id")
+        is_topic_message = msg.get("is_topic_message", False)
+        grouping_thread_id = message_thread_id if is_topic_message else None
 
         if user_id is None or chat_id is None:
             return None
@@ -66,7 +68,7 @@ class TelegramInboundCodec:
 
         # 群聊信息
         if is_group_chat(chat_type):
-            virtual_group_id = build_topic_group_id(chat_id, message_thread_id, direct_messages_topic_id)
+            virtual_group_id = build_topic_group_id(chat_id, grouping_thread_id, direct_messages_topic_id)
             self._logger.debug(
                 "Telegram 入站群聊映射: "
                 f"chat_id={chat_id}, "
