@@ -167,6 +167,26 @@ class TelegramOutboundCodec:
                         direct_messages_topic_id=direct_messages_topic_id,
                     )
                 return {"ok": False}
+            elif seg_type == "sticker":
+                # file_id 优先（原生渲染，静态/动画/视频通吃），字节回退（仅静态贴纸）
+                file_id = seg.get("file_id")
+                if file_id:
+                    return await self._tg.send_sticker_file_id(
+                        chat_id, file_id, reply_to=reply_to,
+                        message_thread_id=message_thread_id,
+                        direct_messages_topic_id=direct_messages_topic_id,
+                    )
+                if binary_b64:
+                    sticker_bytes = base64.b64decode(binary_b64)
+                    sticker_format = "video" if seg.get("is_video") else (
+                        "animated" if seg.get("is_animated") else "static"
+                    )
+                    return await self._tg.send_sticker_bytes(
+                        chat_id, sticker_bytes, sticker_format=sticker_format, reply_to=reply_to,
+                        message_thread_id=message_thread_id,
+                        direct_messages_topic_id=direct_messages_topic_id,
+                    )
+                return {"ok": False}
             elif self._is_local_only_segment(seg):
                 # 这些类型只参与本地语义，不直接发送到 Telegram
                 return {"ok": True}

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
+import base64
 import hashlib
 import re
 import time
@@ -92,9 +93,9 @@ class TelegramInboundCodec:
             seg.get("data", "") for seg in segments if seg.get("type") == "text"
         )
 
-        # 判断是否包含图片/emoji
+        # 判断是否包含图片/emoji（贴纸作为表情包的细化子类型，一并计入）
         has_image = any(seg.get("type") == "image" for seg in segments)
-        has_emoji = any(seg.get("type") == "emoji" for seg in segments)
+        has_emoji = any(seg.get("type") in ("emoji", "sticker") for seg in segments)
 
         message_id = str(msg.get("message_id") or f"tg-{int(time.time() * 1000)}")
 
@@ -162,17 +163,10 @@ class TelegramInboundCodec:
                 else:
                     segs.append({"type": "text", "data": "[图片]"})
 
-        # 贴纸
+        # 贴纸：保留 file_id 供出站 sendSticker 原生渲染
         sticker = msg.get("sticker")
         if sticker:
-            if not (sticker.get("is_animated") or sticker.get("is_video")):
-                raw_bytes = await self._download_file_bytes(sticker.get("file_id"))
-                if raw_bytes:
-                    segs.append(self._build_binary_segment("emoji", raw_bytes))
-                else:
-                    segs.append({"type": "text", "data": "[贴纸]"})
-            else:
-                segs.append({"type": "text", "data": "[贴纸]"})
+            segs.append(await self._build_sticker_segment(sticker))
 
         # 动图
         animation = msg.get("animation")
@@ -216,10 +210,32 @@ class TelegramInboundCodec:
             self._logger.warning(f"Telegram 文件下载失败: {e}")
         return None
 
+    async def _build_sticker_segment(self, sticker: Dict[str, Any]) -> Dict[str, Any]:
+        """构造贴纸段：保留 file_id 供出站 sendSticker 原生渲染。
+
+        静态贴纸额外下载字节作为 file_id 失效时的回退；动画/视频贴纸
+        仅保留 file_id（其字节为 .tgs/.webm，file_id 可保证原生渲染且节省下载）。
+        """
+        file_id = sticker.get("file_id")
+        is_animated = bool(sticker.get("is_animated"))
+        is_video = bool(sticker.get("is_video"))
+        segment: Dict[str, Any] = {
+            "type": "sticker",
+            "data": "",
+            "file_id": file_id,
+            "is_animated": is_animated,
+            "is_video": is_video,
+        }
+        if file_id and not (is_animated or is_video):
+            raw_bytes = await self._download_file_bytes(file_id)
+            if raw_bytes:
+                segment["hash"] = hashlib.sha256(raw_bytes).hexdigest()
+                segment["binary_data_base64"] = base64.b64encode(raw_bytes).decode("utf-8")
+        return segment
+
     @staticmethod
     def _build_binary_segment(seg_type: str, raw_bytes: bytes) -> Dict[str, Any]:
         """构造符合 Host 规范的二进制组件段。"""
-        import base64
         return {
             "type": seg_type,
             "data": "",
