@@ -265,21 +265,37 @@ class TelegramClient:
         async with session.post(self._url("sendSticker"), json=payload, proxy=self._http_proxy()) as resp:
             return await resp.json()
 
+    # sticker_format -> (filename, content_type)
+    _STICKER_FORMAT_META = {
+        "static": ("sticker.webp", "image/webp"),
+        "animated": ("sticker.tgs", "application/x-tgsticker"),
+        "video": ("sticker.webm", "video/webm"),
+    }
+
     async def send_sticker_bytes(
         self,
         chat_id: int | str,
         sticker_bytes: bytes,
+        sticker_format: str = "static",
         reply_to: Optional[int] = None,
         message_thread_id: Optional[int] = None,
         direct_messages_topic_id: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """以 multipart 上传新贴纸字节（.webp/.tgs/.webm），作为 file_id 不可用时的回退。"""
+        """以 multipart 上传新贴纸字节，作为 file_id 不可用时的回退。
+
+        sticker_format 取值与 Telegram sticker_format 一致：
+        ``static``(.webp)、``animated``(.tgs)、``video``(.webm)，
+        决定上传文件名与 Content-Type，避免非 WebP 贴纸被 Telegram 拒收。
+        """
+        filename, content_type = self._STICKER_FORMAT_META.get(
+            sticker_format, self._STICKER_FORMAT_META["static"]
+        )
         session = await self.ensure_session()
         form = aiohttp.FormData()
         form.add_field("chat_id", str(chat_id))
         self._append_reply_form(form, reply_to)
         self._append_topic_form(form, message_thread_id, direct_messages_topic_id)
-        form.add_field("sticker", sticker_bytes, filename="sticker.webp", content_type="image/webp")
+        form.add_field("sticker", sticker_bytes, filename=filename, content_type=content_type)
         async with session.post(self._url("sendSticker"), data=form, proxy=self._http_proxy()) as resp:
             return await resp.json()
 

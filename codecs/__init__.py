@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
+import base64
 import hashlib
 import re
 import time
@@ -215,8 +216,6 @@ class TelegramInboundCodec:
         静态贴纸额外下载字节作为 file_id 失效时的回退；动画/视频贴纸
         仅保留 file_id（其字节为 .tgs/.webm，file_id 可保证原生渲染且节省下载）。
         """
-        import base64
-
         file_id = sticker.get("file_id")
         is_animated = bool(sticker.get("is_animated"))
         is_video = bool(sticker.get("is_video"))
@@ -237,7 +236,6 @@ class TelegramInboundCodec:
     @staticmethod
     def _build_binary_segment(seg_type: str, raw_bytes: bytes) -> Dict[str, Any]:
         """构造符合 Host 规范的二进制组件段。"""
-        import base64
         return {
             "type": seg_type,
             "data": "",

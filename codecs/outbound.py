@@ -178,8 +178,11 @@ class TelegramOutboundCodec:
                     )
                 if binary_b64:
                     sticker_bytes = base64.b64decode(binary_b64)
+                    sticker_format = "video" if seg.get("is_video") else (
+                        "animated" if seg.get("is_animated") else "static"
+                    )
                     return await self._tg.send_sticker_bytes(
-                        chat_id, sticker_bytes, reply_to=reply_to,
+                        chat_id, sticker_bytes, sticker_format=sticker_format, reply_to=reply_to,
                         message_thread_id=message_thread_id,
                         direct_messages_topic_id=direct_messages_topic_id,
                     )
