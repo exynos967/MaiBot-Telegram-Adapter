@@ -105,19 +105,20 @@ class TelegramOutboundCodec:
     def _detect_image_format(data: bytes) -> str:
         """通过文件头魔数识别图片/贴纸格式。
 
+        按各格式实际所需字节数判断，避免误将极小图片归为 unknown：
+        GIF/PNG 需 4 字节，JPEG 需 3 字节，WebP 需 12 字节（RIFF 头 + WEBP 标记）。
+
         Returns:
             ``gif`` | ``png`` | ``webp`` | ``jpeg`` | ``unknown``
         """
-        if len(data) < 12:
-            return "unknown"
         if data[:4] == b"GIF8":
             return "gif"
         if data[:4] == b"\x89PNG":
             return "png"
-        if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
-            return "webp"
         if data[:3] == b"\xff\xd8\xff":
             return "jpeg"
+        if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+            return "webp"
         return "unknown"
 
     @staticmethod
@@ -179,7 +180,8 @@ class TelegramOutboundCodec:
                 return {"ok": False}
             elif seg_type == "emoji":
                 if not binary_b64:
-                    return {"ok": False}
+                    self._logger.warning("emoji 段缺少 binary_data_base64，可能上游消息段构造异常")
+                    return {"ok": False, "description": "emoji 段缺少二进制数据"}
                 raw_bytes = base64.b64decode(binary_b64)
                 fmt = self._detect_image_format(raw_bytes)
                 if fmt == "gif":
