@@ -102,6 +102,25 @@ class TelegramOutboundCodec:
         return seg_type in {"reply", "at", "forward", "dict"}
 
     @staticmethod
+    def _detect_image_format(data: bytes) -> str:
+        """通过文件头魔数识别图片/贴纸格式。
+
+        Returns:
+            ``gif`` | ``png`` | ``webp`` | ``jpeg`` | ``unknown``
+        """
+        if len(data) < 12:
+            return "unknown"
+        if data[:4] == b"GIF8":
+            return "gif"
+        if data[:4] == b"\x89PNG":
+            return "png"
+        if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+            return "webp"
+        if data[:3] == b"\xff\xd8\xff":
+            return "jpeg"
+        return "unknown"
+
+    @staticmethod
     def _format_send_error(seg: Dict[str, Any], result: Dict[str, Any]) -> str:
         seg_type = str(seg.get("type") or "unknown").strip() or "unknown"
         description = str(
@@ -159,14 +178,28 @@ class TelegramOutboundCodec:
                     )
                 return {"ok": False}
             elif seg_type == "emoji":
-                if binary_b64:
-                    anim_bytes = base64.b64decode(binary_b64)
+                if not binary_b64:
+                    return {"ok": False}
+                raw_bytes = base64.b64decode(binary_b64)
+                fmt = self._detect_image_format(raw_bytes)
+                if fmt == "gif":
                     return await self._tg.send_animation_bytes(
-                        chat_id, anim_bytes, reply_to=reply_to,
+                        chat_id, raw_bytes, reply_to=reply_to,
                         message_thread_id=message_thread_id,
                         direct_messages_topic_id=direct_messages_topic_id,
                     )
-                return {"ok": False}
+                if fmt in ("png", "webp"):
+                    return await self._tg.send_sticker_bytes(
+                        chat_id, raw_bytes, sticker_format="static", reply_to=reply_to,
+                        message_thread_id=message_thread_id,
+                        direct_messages_topic_id=direct_messages_topic_id,
+                    )
+                # jpeg / unknown → photo 兜底
+                return await self._tg.send_photo_bytes(
+                    chat_id, raw_bytes, reply_to=reply_to,
+                    message_thread_id=message_thread_id,
+                    direct_messages_topic_id=direct_messages_topic_id,
+                )
             elif seg_type == "sticker":
                 # file_id 优先（原生渲染，静态/动画/视频通吃），字节回退（仅静态贴纸）
                 file_id = seg.get("file_id")
